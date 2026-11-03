@@ -4,7 +4,7 @@ export const company = {
   positioning: "Our mission is to build innovative tech solutions and help your business run smoother with AI. We develop AI and software for businesses, build our own products, and partner with organizations on grant-funded innovation. Founded and run by Alonso Bardales, 23, in Miami. Have an idea you want built! Send us an email.",
   founder: { name: "Alonso Bardales", title: "Founder and software engineer", age: 23, email: "alonso@bardaleslabs.com", location: "Miami, FL", github: "https://github.com/alonbbar6", linkedin: "https://linkedin.com/in/alonso-bardales" },
   domain: "https://bardaleslabs.com",
-  agentsUrl: "https://agents.bardaleslabs.com",
+  agentsUrl: "https://bardaleslabs-agents.alonbbar.workers.dev",
   nav: [
     { href: "/services/", label: "Services" },
     { href: "/work/", label: "Work" },
