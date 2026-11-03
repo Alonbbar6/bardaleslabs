@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BardalesLabs — Watch our agents at work</title>
+<meta name="description" content="A live 3D office where every BardalesLabs AI agent is a character. Embed it in your own product or license the characters." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233f7bd9'/%3E%3Crect x='7' y='17' width='18' height='4' fill='%23fff'/%3E%3Ccircle cx='16' cy='10' r='4' fill='%23fff'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">Bardales<span>Labs</span></a>
+  <nav>
+    <a href="#live">Live</a><a href="#embed">Embed</a><a href="#license">License</a>
+    <span class="status" data-status>demo</span>
+  </nav>
+</header>
+
+<main>
+  <section class="hero" id="live">
+    <div class="hero__copy">
+      <p class="eyebrow">Pixel · agent visualization</p>
+      <h1>Watch our agents at work.</h1>
+      <p class="lede">Six AI agents turn a product idea into a build brief. Every step they take shows up here in real time: who is working, what they are working on, and what gets handed to whom.</p>
+      <div class="hero__actions">
+        <button class="btn" data-mode="demo">Demo run</button>
+        <button class="btn btn--ghost" data-mode="live">Connect live</button>
+        <input class="ws" data-ws placeholder="wss://your-backend/agents" hidden />
+      </div>
+    </div>
+    <div class="stage">
+      <div class="office" data-office></div>
+      <div class="loading" data-loading>Loading office…</div>
+      <ol class="feed" data-feed></ol>
+      <ul class="roster" data-roster></ul>
+    </div>
+  </section>
+
+  <section class="block" id="how">
+    <h2>What you are looking at</h2>
+    <div class="grid">
+      <div><b>Intake</b><p>reads your description and asks what is missing.</p></div>
+      <div><b>Designer</b><p>writes the spec and picks an approach.</p></div>
+      <div><b>Parts Buyer</b><p>lists every part, with prices and sources.</p></div>
+      <div><b>Critic</b><p>checks the design and flags problems.</p></div>
+      <div><b>Reviser</b><p>fixes what the Critic found.</p></div>
+      <div><b>Report Writer</b><p>turns everything into a build guide.</p></div>
+    </div>
+    <p class="muted">When an agent carries a box to another desk, that is a real hand-off: its output became the next agent's input. A <span class="pill pill--warn">!</span> on the box means issues were found; <span class="pill pill--ask">?</span> at the round table means the run is waiting on you.</p>
+  </section>
+
+  <section class="block" id="embed">
+    <h2>Put this in your product</h2>
+    <p>The office is a drop-in component. Point it at your own event stream and your agents appear at the desks.</p>
+    <div class="cols">
+      <div>
+        <h3>1 · iframe (no code)</h3>
+<pre><code>&lt;iframe
+  src="<span data-origin></span>/embed.html?ws=wss://YOUR-BACKEND/agents"
+  width="100%" height="560" style="border:0;border-radius:12px"
+  allow="fullscreen"&gt;&lt;/iframe&gt;</code></pre>
+        <p class="muted">Leave <code>ws</code> off to show the demo run. Add <code>&amp;controls=0</code> to lock the camera.</p>
+      </div>
+      <div>
+        <h3>2 · npm (your own page)</h3>
+<pre><code>npm i @bardaleslabs/pixel-office three
+
+import { createOffice, connectWebSocket }
+  from "@bardaleslabs/pixel-office";
+
+const office = createOffice(el, { modelsBase: "/models/" });
+connectWebSocket(office, "wss://YOUR-BACKEND/agents");
+
+// or drive it yourself
+office.dispatch({ type: "agent.state", agent: "designer",
+                  state: "typing", message: "writing the spec" });</code></pre>
+      </div>
+    </div>
+    <h3>Event schema</h3>
+<pre><code>{ "type": "agent.state", "agent": "intake",  "state": "typing",  "message": "reading the brief" }
+{ "type": "agent.state", "agent": "intake",  "state": "carry",   "to": "designer" }          // to: agent id | "review"
+{ "type": "agent.state", "agent": "critic",  "state": "carry",   "to": "reviser", "warn": true }
+{ "type": "agent.state", "agent": "critic",  "state": "waiting" }
+{ "type": "agent.state", "agent": "report-writer", "state": "done" }                          // states: idle typing carry walk waiting done failed
+{ "type": "run.log",     "message": "Run 42 started" }
+{ "type": "run.reset" }</code></pre>
+    <p class="muted">Agents, names and models are configurable (<code>agents: [{ id, name, model }]</code>). Full docs in the README.</p>
+  </section>
+
+  <section class="block license" id="license">
+    <div>
+      <h2>License the characters — $5</h2>
+      <p>The six office workers you see here, as web-ready GLB files: Mixamo-compatible rig, 9 animations each (typing, sitting idle, walking, carrying, cheering, finger-wag "no", answering questions, idle, running), 1024px textures, ~0.9 MB per character.</p>
+      <ul class="checks">
+        <li>Use in unlimited personal and commercial projects</li>
+        <li>Games, apps, websites, videos, prototypes</li>
+        <li>Lifetime license, one-time payment</li>
+        <li>No resale or redistribution of the raw files</li>
+      </ul>
+      <a class="btn btn--buy" data-buy href="#" target="_blank" rel="noopener">Buy the character pack · $5</a>
+      <p class="muted small">Secure checkout via Stripe. You get an instant download link. <a href="/LICENSE-MODELS.md">Read the license</a>.</p>
+    </div>
+    <div class="pack" data-pack></div>
+  </section>
+</main>
+
+<footer class="foot">
+  <span>© BardalesLabs</span>
+  <span>Characters: Meshy AI + Mixamo · Furniture: Kenney.nl (CC0) · Built with three.js</span>
+</footer>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

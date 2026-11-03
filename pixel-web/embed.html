@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agents at work</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1b1d24; overflow: hidden; font: 13px/1.4 system-ui, sans-serif; color: #e6e6e6; }
+  .office { position: absolute; inset: 0; }
+  .feed { position: absolute; left: 10px; bottom: 10px; margin: 0; padding: 8px 10px; list-style: none; max-width: 380px; background: rgba(20,22,30,.85); border: 1px solid #333; border-radius: 6px; }
+  .feed li { color: #a7abb6; } .feed li:last-child { color: #fff; }
+  .loading { position: absolute; inset: 0; display: grid; place-items: center; background: #1b1d24; }
+  .credit { position: absolute; right: 10px; bottom: 10px; font-size: 11px; color: #777; }
+  .credit a { color: #9aa3b2; }
+</style>
+</head>
+<body>
+<div class="office" data-office></div>
+<div class="loading" data-loading>Loading…</div>
+<ol class="feed" data-feed></ol>
+<div class="credit"><a href="/" target="_blank" rel="noopener">BardalesLabs</a></div>
+<script type="module" src="/src/embed.js"></script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "name": "@bardaleslabs/pixel-office",
+  "version": "0.1.0",
+  "description": "Watch your AI agents at work: a 3D office visualization driven by agent events.",
+  "type": "module",
+  "license": "SEE LICENSE IN LICENSE-MODELS.md",
+  "files": ["dist-lib", "public/models", "LICENSE-MODELS.md", "README.md"],
+  "main": "./dist-lib/pixel-office.js",
+  "module": "./dist-lib/pixel-office.js",
+  "exports": { ".": "./dist-lib/pixel-office.js", "./models/*": "./public/models/*" },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && vite build --config vite.lib.config.js",
+    "preview": "vite preview",
+    "pack:models": "sh scripts/pack-models.sh",
+    "mock:ws": "node scripts/mock-ws-server.mjs"
+  },
+  "peerDependencies": { "three": ">=0.165" },
+  "dependencies": { "three": "^0.170.0" },
+  "devDependencies": { "vite": "^7.1.0", "ws": "^8.18.0" }
+}

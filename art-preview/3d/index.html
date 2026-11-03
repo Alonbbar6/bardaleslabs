@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BardalesLabs office — 3D preview (Meshy characters + Kenney CC0 furniture)</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1b1d24; color: #e6e6e6; font: 14px/1.4 system-ui, sans-serif; overflow: hidden; }
+  #ui { position: fixed; top: 0; left: 0; right: 0; display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; background: linear-gradient(#1b1d24, rgba(27,29,36,0)); z-index: 2; }
+  button { background: #2b2f3a; color: #e6e6e6; border: 1px solid #444; border-radius: 4px; padding: 6px 10px; cursor: pointer; }
+  button.on { background: #3f7bd9; border-color: #3f7bd9; }
+  #feed { position: fixed; left: 10px; bottom: 10px; max-width: 420px; background: rgba(20,22,30,.85); border: 1px solid #333; border-radius: 6px; padding: 8px 10px; font-size: 13px; z-index: 2; }
+  #feed div { color: #a7abb6; } #feed div:last-child { color: #fff; }
+  #credit { position: fixed; right: 10px; bottom: 10px; font-size: 11px; color: #777; z-index: 2; }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; background: #1b1d24; z-index: 3; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<div id="loading">Loading models…</div>
+<div id="ui"></div>
+<div id="feed"></div>
+<div id="credit">Characters: Meshy AI + Mixamo · Furniture: Kenney.nl (CC0) · drag to orbit, scroll to zoom</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+
+// Characters: Meshy AI generations rigged/animated with Mixamo, compressed by scripts/build-chars.sh
+const CH = "assets/custom/", FU = "assets/furniture/Models/GLTF format/";
+const ROLES = [
+  { name: "Intake",        model: "intake" },
+  { name: "Designer",      model: "designer" },
+  { name: "Parts Buyer",   model: "parts-buyer" },
+  { name: "Critic",        model: "critic" },
+  { name: "Reviser",       model: "reviser" },
+  { name: "Report Writer", model: "report-writer" },
+];
+// scene action -> Mixamo clip name baked into every GLB
+const ANIM = { sit: "Chair_Sit_Idle_M", type: "Typing", walk: "Walking", carry: "Carry_Heavy_Object_Walk", stand: "Idle_3", cheer: "Cheer_with_Both_Hands", no: "Finger_Wag_No" };
+const CHAR_HEIGHT = 1.3, SIT_DZ = -0.5;
+// units/sec per locomotion clip, tuned so feet don't slide at CHAR_HEIGHT
+const SPEED = { walk: 1.0, carry: 0.75 };
+const STEP_SECS = 7, HANDOFF_AT = 3;
+
+// Layout: 3 desks wide x 2 rows, everyone faces +z (towards the camera); review table in front.
+const COLS = 3, SX = 1.8, RZ = 2.4;
+const deskPos = (i) => ({ x: (i % COLS) * SX, z: Math.floor(i / COLS) * RZ });
+const REVIEW = { x: SX, z: RZ + 2.6 };
+const ROOM = { x0: -1.4, x1: (COLS - 1) * SX + 1.4, z0: -1.3, z1: REVIEW.z + 1.6 };
+const CENTER = new THREE.Vector3(SX, 0.5, RZ * 0.6);
+
+// ---------- scene ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1b1d24);
+const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(SX + 0.5, 6.5, REVIEW.z + 6.5);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.copy(CENTER); controls.maxPolarAngle = Math.PI / 2.1; controls.update();
+scene.add(new THREE.HemisphereLight(0xf4f6ff, 0x3a3d45, 1.0));
+const sun = new THREE.DirectionalLight(0xfff4e6, 1.8); sun.position.set(-4, 9, 7); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); sun.shadow.camera.left = -8; sun.shadow.camera.right = 8; sun.shadow.camera.top = 8; sun.shadow.camera.bottom = -8; sun.shadow.bias = -0.0005;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xcfe3ff, 0.5); fill.position.set(6, 4, -3); scene.add(fill);
+addEventListener("resize", () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+// ---------- procedural textures (modern office: carpet tiles, concrete walls) ----------
+function canvasTex(size, draw, repeat = [1, 1]) {
+  const c = document.createElement("canvas"); c.width = c.height = size;
+  draw(c.getContext("2d"), size);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(...repeat); t.anisotropy = 8; return t;
+}
+function noise(g, size, alpha, n = 4000) {
+  for (let i = 0; i < n; i++) { g.fillStyle = `rgba(${Math.random() > .5 ? 255 : 0},${Math.random() > .5 ? 255 : 0},${Math.random() > .5 ? 255 : 0},${alpha})`; g.fillRect(Math.random() * size, Math.random() * size, 2, 2); }
+}
+// 2x2 carpet tiles per texture, each tile 0.5 m -> texture covers 1 m
+const carpetTex = (w, d) => canvasTex(512, (g, s) => {
+  const half = s / 2, shades = ["#575b63", "#5c6068", "#53575f", "#595d65"];
+  for (let i = 0; i < 4; i++) { g.fillStyle = shades[i]; g.fillRect((i % 2) * half, Math.floor(i / 2) * half, half, half); }
+  for (let y = 0; y < s; y += 3) { g.fillStyle = `rgba(0,0,0,${0.05 + Math.random() * 0.08})`; g.fillRect(0, y, s, 1); } // fibre lines
+  noise(g, s, 0.08, 9000);
+  g.strokeStyle = "rgba(0,0,0,.35)"; g.lineWidth = 2; g.strokeRect(1, 1, half - 2, half - 2); g.strokeRect(half + 1, 1, half - 2, half - 2); g.strokeRect(1, half + 1, half - 2, half - 2); g.strokeRect(half + 1, half + 1, half - 2, half - 2);
+}, [w, d]);
+const concreteTex = (w, h) => canvasTex(512, (g, s) => {
+  g.fillStyle = "#d8d8d3"; g.fillRect(0, 0, s, s);
+  for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(${170 + Math.random() * 40 | 0},${170 + Math.random() * 40 | 0},${165 + Math.random() * 40 | 0},.05)`; g.beginPath(); g.ellipse(Math.random() * s, Math.random() * s, 40 + Math.random() * 120, 20 + Math.random() * 60, Math.random() * 3, 0, 7); g.fill(); }
+  noise(g, s, 0.06, 16000);
+  g.strokeStyle = "rgba(0,0,0,.14)"; g.lineWidth = 3; g.strokeRect(1.5, 1.5, s - 3, s - 3); // panel seams
+  for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { g.fillStyle = "rgba(0,0,0,.25)"; g.beginPath(); g.arc(24 + i * (s - 48), 24 + j * (s - 48), 5, 0, 7); g.fill(); } // formwork ties
+}, [w, h]);
+const deskMat = new THREE.MeshStandardMaterial({ color: 0xf2f1ec, roughness: 0.85, metalness: 0.0 });
+const darkMat = new THREE.MeshStandardMaterial({ color: 0x2a2c31, roughness: 0.6 });
+
+function buildRoom() {
+  const w = ROOM.x1 - ROOM.x0, d = ROOM.z1 - ROOM.z0, cx = (ROOM.x0 + ROOM.x1) / 2, cz = (ROOM.z0 + ROOM.z1) / 2, H = 2.8;
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ map: carpetTex(w, d), roughness: 1 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.set(cx, 0, cz); floor.receiveShadow = true; scene.add(floor);
+  const wallMat = (len) => new THREE.MeshStandardMaterial({ map: concreteTex(len / H * 1.0, 1.0), roughness: 0.95 });
+  const back = new THREE.Mesh(new THREE.BoxGeometry(w, H, 0.12), wallMat(w)); back.position.set(cx, H / 2, ROOM.z0 - 0.06); back.receiveShadow = true; scene.add(back);
+  const left = new THREE.Mesh(new THREE.BoxGeometry(0.12, H, d), wallMat(d)); left.position.set(ROOM.x0 - 0.06, H / 2, cz); left.receiveShadow = true; scene.add(left);
+  // baseboards
+  for (const [geo, pos] of [[new THREE.BoxGeometry(w, 0.08, 0.03), [cx, 0.04, ROOM.z0 + 0.015]], [new THREE.BoxGeometry(0.03, 0.08, d), [ROOM.x0 + 0.015, 0.04, cz]]]) { const m = new THREE.Mesh(geo, darkMat); m.position.set(...pos); scene.add(m); }
+  // windows on the back wall: dark frame + sky glow
+  for (const wx of [SX - 1.5, SX + 1.5]) {
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.1, 0.06), darkMat); frame.position.set(wx, 1.7, ROOM.z0 + 0.02); scene.add(frame);
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(1.46, 0.96), new THREE.MeshStandardMaterial({ color: 0xbfd9f2, emissive: 0x9cc4ea, emissiveIntensity: 0.6, roughness: 0.2 })); glass.position.set(wx, 1.7, ROOM.z0 + 0.06); scene.add(glass);
+    const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.96, 0.02), darkMat); mullion.position.set(wx, 1.7, ROOM.z0 + 0.07); scene.add(mullion);
+  }
+}
+
+// ---------- loading helpers ----------
+const loader = new GLTFLoader();
+loader.setMeshoptDecoder(MeshoptDecoder);
+const cache = new Map();
+const load = (url) => cache.get(url) || cache.set(url, loader.loadAsync(url)).get(url);
+function normalize(obj, target, axis = "y") {
+  const box = new THREE.Box3().setFromObject(obj), size = box.getSize(new THREE.Vector3());
+  const s = target / size[axis]; obj.scale.setScalar(s);
+  box.setFromObject(obj); obj.position.y -= box.min.y;
+  const c = box.getCenter(new THREE.Vector3()); obj.position.x -= c.x; obj.position.z -= c.z;
+  const g = new THREE.Group(); g.add(obj);
+  obj.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+  return g;
+}
+async function prop(name, size, x, z, ry = 0, mat = null, y = 0) {
+  const g = normalize((await load(FU + name + ".glb")).scene.clone(), size);
+  if (mat) g.traverse(m => { if (m.isMesh) m.material = mat; });
+  g.position.set(x, y, z); g.rotation.y = ry; scene.add(g); return g;
+}
+const DESK_H = 0.6;
+
+// ---------- bubbles / badges (canvas sprites) ----------
+function makeSprite(text, bg, fg = "#fff") {
+  const c = document.createElement("canvas"); c.width = 256; c.height = 128;
+  const g = c.getContext("2d");
+  g.fillStyle = bg; g.beginPath(); g.roundRect(8, 8, 240, 92, 24); g.fill();
+  g.beginPath(); g.moveTo(112, 100); g.lineTo(144, 100); g.lineTo(128, 124); g.fill();
+  g.fillStyle = fg; g.font = "bold 44px system-ui"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(text, 128, 56);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthTest: false }));
+  sp.scale.set(1.2, 0.6, 1); sp.renderOrder = 10; return sp;
+}
+const BUBBLES = { ask: () => makeSprite("?", "#3f7bd9"), warn: () => makeSprite("!", "#d9342b"), done: () => makeSprite("✓", "#2fb85a"), failed: () => makeSprite("✕", "#d9342b"), work: () => makeSprite("…", "#f4f4ee", "#333") };
+
+// Name + activity label that floats over each character's head
+function makeLabel() {
+  const c = document.createElement("canvas"); c.width = 512; c.height = 160;
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sp.scale.set(1.25, 0.39, 1); sp.renderOrder = 9;
+  sp.set = (name, activity, accent = "#9aa3b2") => {
+    const g = c.getContext("2d"); g.clearRect(0, 0, 512, 160);
+    g.fillStyle = "rgba(20,22,30,.82)"; g.beginPath(); g.roundRect(16, 16, 480, 128, 22); g.fill();
+    g.fillStyle = accent; g.fillRect(16, 16, 10, 128);
+    g.textAlign = "left"; g.textBaseline = "middle";
+    g.fillStyle = "#fff"; g.font = "bold 46px system-ui"; g.fillText(name, 48, 58);
+    g.fillStyle = "#c7cdd8"; g.font = "36px system-ui"; g.fillText(activity, 48, 110, 430);
+    tex.needsUpdate = true;
+  };
+  return sp;
+}
+const ACCENT = { idle: "#6b7280", typing: "#f2c94c", carry: "#3f7bd9", walk: "#3f7bd9", waiting: "#a855f7", done: "#2fb85a", failed: "#d9342b" };
+
+// Cardboard box carried during hand-offs; positioned between the hands every frame
+function makeBox() {
+  const tex = canvasTex(256, (g, s) => {
+    g.fillStyle = "#c9a26b"; g.fillRect(0, 0, s, s);
+    noise(g, s, 0.06, 3000);
+    g.fillStyle = "#e8dcc0"; g.fillRect(s * 0.42, 0, s * 0.16, s); // tape
+    g.strokeStyle = "rgba(0,0,0,.25)"; g.lineWidth = 3; g.strokeRect(2, 2, s - 4, s - 4);
+  });
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.24, 0.26), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }));
+  box.castShadow = true; box.visible = false; return box;
+}
+
+// ---------- characters ----------
+const chars = [];
+async function makeCharacter(role, i) {
+  const gltf = await load(CH + role.model + ".glb");
+  const model = gltf.scene; // one model per role, no clone needed
+  const g = normalize(model, CHAR_HEIGHT);
+  // skinned bounds are computed from the T-pose; disable culling so sitting/leaning poses never pop out
+  model.traverse(m => { if (m.isSkinnedMesh) m.frustumCulled = false; });
+  const mixer = new THREE.AnimationMixer(model);
+  const clips = Object.fromEntries(gltf.animations.map(a => [a.name, mixer.clipAction(a, model)]));
+  const { x: deskX, z: deskZ } = deskPos(i);
+  const ch = { role, g, model, mixer, clips, current: null, deskX, deskZ, bubble: null, tween: null, state: "", anim: "" };
+  ch.label = makeLabel(); ch.label.position.set(0, CHAR_HEIGHT + 0.25, 0); g.add(ch.label);
+  ch.setLabel = (activity, state) => ch.label.set(role.name, activity, ACCENT[state] ?? ACCENT.idle);
+  ch.setLabel("idle", "idle");
+  ch.box = makeBox(); scene.add(ch.box);
+  // GLTFLoader strips ":" from node names, so "mixamorig:LeftHand" becomes "mixamorigLeftHand"
+  const bone = (n) => { let hit = null; model.traverse(o => { if (!hit && o.name.replace(/[:_]/g, "").endsWith(n)) hit = o; }); return hit; };
+  ch.hands = [bone("LeftHand"), bone("RightHand")];
+  ch.holdBox = (on) => { ch.box.visible = on && !!ch.hands[0] && !!ch.hands[1]; };
+  ch.play = (name, once = false) => {
+    if (ch.anim === name) return;
+    const a = clips[ANIM[name] ?? name]; if (!a) { console.warn(role.name, "missing clip", name); return; }
+    if (ch.current) ch.current.fadeOut(0.25);
+    a.reset().setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity).fadeIn(0.25).play();
+    a.clampWhenFinished = once; ch.current = a; ch.anim = name;
+  };
+  ch.setBubble = (kind) => {
+    if (ch.bubble) { g.remove(ch.bubble); ch.bubble = null; }
+    if (kind) { ch.bubble = BUBBLES[kind](); ch.bubble.position.set(0, CHAR_HEIGHT + 0.85, 0); g.add(ch.bubble); }
+  };
+  ch.sitAtDesk = (anim = "sit") => { ch.tween = null; g.position.set(deskX, 0, deskZ + SIT_DZ); g.rotation.y = 0; ch.play(anim); };
+  ch.standSpot = () => new THREE.Vector3(deskX + 0.8, 0, deskZ + 0.4);
+  ch.standAtDesk = () => { ch.tween = null; g.position.copy(ch.standSpot()); g.rotation.y = Math.PI / 2; };
+  ch.walkTo = (x, z, anim, then) => {
+    const from = g.position.clone(), to = new THREE.Vector3(x, 0, z), dist = from.distanceTo(to);
+    if (dist < 0.05) { g.position.copy(to); then && then(); return; }
+    g.position.y = 0; g.rotation.y = Math.atan2(to.x - from.x, to.z - from.z); ch.play(anim);
+    ch.tween = { from, to, t: 0, dur: Math.max(0.3, dist / (SPEED[anim] ?? 1)), then };
+  };
+  // walk through a list of [x, z] waypoints (so we go around desks, not through them)
+  ch.walkPath = (pts, anim, then) => { const [p, ...rest] = pts; if (!p) return then && then(); ch.walkTo(p[0], p[1], anim, () => ch.walkPath(rest, anim, then)); };
+  scene.add(g); chars.push(ch);
+}
+// Route from a character's stand spot to a hand-off point: out to the aisle in front of its own row,
+// along the aisle, down the gap beside the target column, then step in front of the receiver.
+function routeTo(ch, target) {
+  const s = ch.standSpot(), aisle = ch.deskZ + 0.9;
+  if (target.review) { const pts = [[s.x, aisle], [s.x, REVIEW.z - 0.8], [REVIEW.x, REVIEW.z - 0.8]]; return { pts, face: 0 }; }
+  const gap = target.x + 0.9, hz = target.z + 0.9;
+  return { pts: [[s.x, aisle], [gap, aisle], [gap, hz], [target.x, hz]], face: Math.PI };
+}
+
+// ---------- build office ----------
+async function build() {
+  buildRoom();
+  for (let i = 0; i < ROLES.length; i++) {
+    const { x, z } = deskPos(i);
+    await prop("desk", DESK_H, x, z, Math.PI, deskMat);
+    await prop("chairDesk", 0.75, x, z - 0.6, 0, darkMat);
+    await prop("computerScreen", 0.32, x, z + 0.12, Math.PI, null, DESK_H);
+    await prop("computerKeyboard", 0.03, x, z - 0.15, Math.PI, null, DESK_H);
+    await makeCharacter(ROLES[i], i);
+  }
+  await prop("plantSmall2", 0.5, ROOM.x0 + 0.5, RZ + 0.2);
+  await prop("tableRound", 0.6, REVIEW.x, REVIEW.z, 0, deskMat);
+  await prop("books", 0.08, REVIEW.x, REVIEW.z + 0.02, 0.4, null, DESK_H);
+  await prop("lampRoundFloor", 1.3, ROOM.x1 - 0.5, REVIEW.z - 0.4);
+  await prop("pottedPlant", 0.9, ROOM.x0 + 0.5, ROOM.z0 + 0.5);
+  await prop("bookcaseOpen", 1.4, ROOM.x1 - 0.6, ROOM.z0 + 0.3, 0);
+  await prop("kitchenCoffeeMachine", 0.35, ROOM.x1 - 0.5, RZ + 0.3);
+  chars.forEach(c => c.sitAtDesk());
+  document.getElementById("loading").remove();
+}
+
+// ---------- states (driven by events in the real product) ----------
+const feed = document.getElementById("feed");
+function log(msg) { const d = document.createElement("div"); d.textContent = msg; feed.appendChild(d); while (feed.children.length > 4) feed.firstChild.remove(); }
+
+const DEFAULT_MSG = { idle: "idle", typing: "working", walk: "stretching legs", carry: "handing off", waiting: "waiting for approval", done: "done", failed: "failed" };
+function setState(ch, state, extra = {}) {
+  if (ch.state === state && !extra.force) return;
+  ch.state = state; ch.holdBox(false);
+  ch.setLabel(extra.msg ?? DEFAULT_MSG[state] ?? state, state);
+  switch (state) {
+    case "idle": ch.sitAtDesk("sit"); ch.setBubble(null); break;
+    case "typing": ch.sitAtDesk("type"); ch.setBubble("work"); break;
+    case "walk": { const s = ch.standSpot(); ch.standAtDesk(); ch.walkTo(s.x, s.z + 1.2, "walk", () => ch.walkTo(s.x, s.z, "walk", () => setState(ch, "walk", { force: true }))); ch.setBubble(null); break; }
+    case "carry": {
+      // get up, carry the output to the receiver, hand it over, walk back and sit down
+      const target = extra.to ?? { ...deskPos((chars.indexOf(ch) + 1) % ROLES.length) };
+      const { pts, face } = routeTo(ch, target);
+      ch.standAtDesk(); ch.setBubble(extra.warn ? "warn" : null); ch.holdBox(true);
+      ch.walkPath(pts, "carry", () => {
+        ch.g.rotation.y = face; ch.setBubble(null); ch.play("stand"); ch.holdBox(false);
+        ch.setLabel(extra.toName ? `handed off to ${extra.toName}` : "handed off", "carry");
+        setTimeout(() => { if (ch.state !== "carry") return; ch.setLabel("back to desk", "walk"); const back = pts.slice(0, -1).reverse(); back.push([ch.standSpot().x, ch.standSpot().z]); ch.walkPath(back, "walk", () => { if (ch.state === "carry") setState(ch, "idle"); }); }, 900);
+      });
+      break;
+    }
+    case "waiting": ch.tween = null; ch.g.position.set(REVIEW.x, 0, REVIEW.z - 0.8); ch.g.rotation.y = 0; ch.play("stand"); ch.setBubble("ask"); break;
+    case "done": ch.standAtDesk(); ch.g.rotation.y = 0; ch.play("cheer"); ch.setBubble("done"); break;
+    case "failed": ch.standAtDesk(); ch.g.rotation.y = 0; ch.play("no"); ch.setBubble("failed"); break;
+  }
+}
+
+// Demo script: a fake run, only for the art preview. In the product every line is a backend event.
+const ORDER = [0, 1, 2, 3, 4, 3, 5];
+const MSG = ["reading the description", "writing the spec", "listing parts", "checking the design", "fixing 2 problems", "re-checking the design", "writing the build guide"];
+let mode = "demo", demoStep = -1, demoT = 0;
+function demoTick(dt) {
+  demoT += dt;
+  const step = Math.floor(demoT / STEP_SECS) % 11;
+  if (step === demoStep) return;
+  demoStep = step;
+  chars.forEach(c => { if (c.state !== "idle") setState(c, "idle"); });
+  if (step < 7) {
+    const i = ORDER[step]; log(`${ROLES[i].name} is ${MSG[step]}`); setState(chars[i], "typing", { msg: MSG[step] });
+    const next = ORDER[step + 1];
+    const to = next === undefined ? { review: true } : deskPos(next), toName = next === undefined ? "review" : ROLES[next].name;
+    setTimeout(() => { if (mode === "demo" && demoStep === step) setState(chars[i], "carry", { to, toName, warn: step === 3, msg: `taking ${step === 3 ? "issues" : "output"} to ${toName}` }); }, HANDOFF_AT * 1000);
+  } else if (step === 7) { log("Waiting for your approval"); setState(chars[3], "waiting"); }
+  else if (step === 8) { log("You approved. Report Writer is finishing"); setState(chars[5], "typing", { msg: "finishing the build guide" }); }
+  else if (step === 9) { log("Done — your design brief is ready"); chars.forEach(c => setState(c, "done")); }
+  else { log("New run starting"); }
+}
+
+// ---------- UI ----------
+const ui = document.getElementById("ui");
+for (const m of ["demo", "idle", "typing", "walk", "carry", "waiting", "done", "failed"]) {
+  const b = document.createElement("button"); b.textContent = m === "demo" ? "Play sequence" : m;
+  if (m === mode) b.classList.add("on");
+  b.onclick = () => { mode = m; demoStep = -1; [...ui.children].forEach(c => c.classList.toggle("on", c === b));
+    if (m !== "demo") { log(`Preview: all characters → ${m}`); chars.forEach((c) => setState(c, m, { force: true })); } };
+  ui.appendChild(b);
+}
+
+// ---------- loop ----------
+const clock = new THREE.Clock(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
+function animate() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (mode === "demo" && chars.length === ROLES.length) demoTick(dt);
+  for (const ch of chars) {
+    ch.mixer.update(dt);
+    if (ch.tween) {
+      const tw = ch.tween; tw.t += dt / tw.dur;
+      if (tw.t >= 1) { ch.g.position.copy(tw.to); ch.tween = null; tw.then && tw.then(); }
+      else ch.g.position.lerpVectors(tw.from, tw.to, tw.t);
+    }
+    if (ch.box.visible) {
+      ch.g.updateMatrixWorld(true);
+      ch.box.position.copy(ch.hands[0].getWorldPosition(_a)).add(ch.hands[1].getWorldPosition(_b)).multiplyScalar(0.5);
+      ch.box.rotation.y = ch.g.rotation.y;
+    }
+  }
+  controls.update(); renderer.render(scene, camera); requestAnimationFrame(animate);
+}
+window.__office = { scene, camera, controls, chars, setState }; // debugging hook
+build().then(() => { log("Office ready"); animate(); }).catch(e => { document.getElementById("loading").textContent = "Failed to load: " + e.message; console.error(e); });
+</script>
+</body>
+</html>

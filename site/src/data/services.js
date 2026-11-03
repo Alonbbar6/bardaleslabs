@@ -1,0 +1,58 @@
+export const services = [
+  {
+    id: "ai-solutions", n: "01", title: "AI solutions and agents",
+    short: "Agents and pipelines that do real work: research, triage, outreach, publishing, testing.",
+    body: "We build systems where AI does the repetitive part and a person stays in control. Scoped permissions, a written trail for every decision, and a recovery path when a step fails. Built on Claude, OpenAI, Azure AI Foundry and your existing tools.",
+    points: ["Function-calling agents and multi-step pipelines", "RAG over your documents, on your infrastructure", "Voice agents and the test harnesses that keep them honest", "Guardrails: rate limits, spend ceilings, audit logs"],
+    work: ["vibemusicians", "ai-assistant", "voice-harness", "tutorio"],
+    cta: "Book a call",
+  },
+  {
+    id: "software", n: "02", title: "Software and web platforms",
+    short: "Marketplaces, admin systems, stores and websites, built to run a business end to end.",
+    body: "From a one-page marketing site to a two-sided marketplace with payments, drivers and an admin console. We design, build, test and operate. Everything ships with the operational pieces most projects skip: encryption at rest, integration tests, uptime probes, data retention.",
+    points: ["Marketplaces and booking platforms", "E-commerce with payments and CRM sync", "Admin dashboards and internal tools", "Fast, accessible marketing sites with motion that means something"],
+    work: ["laptop-store", "miami-market", "socialsnap"],
+    cta: "Book a call",
+  },
+  {
+    id: "ios", n: "03", title: "iOS apps",
+    short: "Native SwiftUI apps from first sketch to App Store review.",
+    body: "Five apps shipped in about seven months. Sync, parsing, offline behaviour and AR treated as product features, not afterthoughts. We handle design, build, TestFlight and the App Store listing.",
+    points: ["SwiftUI, iCloud sync, natural-language input", "Offline-first data and background sync", "App Store submission and review", "Companion web dashboards when the app needs one"],
+    work: ["priority-task-manager", "quintave"],
+    cta: "See the apps", ctaHref: "/apps/",
+  },
+  {
+    id: "lead-generation", n: "04", title: "Lead generation",
+    short: "More qualified conversations, without hiring a sales team.",
+    body: "We find businesses that fit your offer, research them, and reach out on your behalf, then pass interested prospects to you. Six AI agents do the research, writing, checking, sending and follow-up; a person approves the profile and reads every reply. Every message says who we are and who we represent.",
+    points: ["Ideal-customer profile you approve", "Verified prospect list, built by our own discovery systems", "Personal outreach and follow-up, sent as BardalesLabs for you", "Qualified meetings on your calendar, with a brief"],
+    steps: [
+      { title: "We define your ideal customer.", body: "A one-hour call. Who buys from you, who doesn't, what a good deal looks like. We turn it into a written profile you approve.", agent: "researcher" },
+      { title: "We build and verify a prospect list.", body: "Agents research each company and contact. Bad fits and unverifiable emails are dropped before anyone is contacted.", agent: "writer" },
+      { title: "We run outreach on your behalf and make it clear who we represent.", body: "Personal, short messages signed as BardalesLabs for your company. Replies handled, follow-ups on schedule, you see everything.", agent: "outreach" },
+      { title: "Interested prospects get booked with you.", body: "When someone wants to talk, we put the meeting on your calendar with a brief: who they are, what they said, what to lead with.", agent: "booker" },
+    ],
+    work: ["vibeleads", "lead-radar"],
+    office: true,
+    cta: "Book a call",
+  },
+  {
+    id: "advisory", n: "05", title: "AI advisory and contract work",
+    short: "Find where AI can save your team time, then get help building and launching it.",
+    body: "Most AI projects stall between the idea and something people use every day. We do the part in between: an audit of where the hours go, a build of the one or two things worth automating, and a launch with training and guardrails. Fixed-scope contracts or a monthly retainer. Alonso is also available for remote contract roles and embedded engineering work.",
+    points: ["Audit: 1–2 weeks, written plan ranked by hours saved", "Build: fixed scope and price, 2–8 weeks", "Launch: training, guardrails, handover, a month of support", "Remote contract or embedded engineer"],
+    work: ["ai-assistant", "voice-harness"],
+    cta: "Book a call",
+  },
+  {
+    id: "grants", n: "06", title: "Innovation and grant partnerships",
+    short: "Partner with us on grant-funded and challenge-backed projects.",
+    body: "We team up with organizations, colleges and public programs to turn a funded idea into working software: AI literacy platforms, community tools, applied-AI pilots. We bring the engineering and the delivery record; you bring the mission and the domain. Built an AI literacy learning management system for the EPIC Innovation Challenge and multi-agent workflows on Azure AI Foundry with MicroFinance Pro.",
+    points: ["Technical partner on grant applications", "Pilot builds with measurable outcomes", "Open reporting: what was built, what it did", "Handover to your team or continued operation"],
+    work: [],
+    cta: "Propose a partnership",
+  },
+];
+export const serviceById = Object.fromEntries(services.map(s => [s.id, s]));

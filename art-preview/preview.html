@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BardalesLabs pixel office — art preview</title>
+<style>
+  body { margin: 0; background: #1b1d24; color: #e6e6e6; font: 14px/1.4 system-ui, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p { color: #a7abb6; margin: 0 0 14px; }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; max-width: 100%; }
+  .scene { background: #000; border: 2px solid #333; border-radius: 6px; margin-bottom: 14px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; }
+  button { background: #2b2f3a; color: #e6e6e6; border: 1px solid #444; border-radius: 4px; padding: 6px 10px; cursor: pointer; }
+  button.on { background: #3f7bd9; border-color: #3f7bd9; }
+  h2 { font-size: 15px; margin: 18px 0 6px; }
+  .sheet { background: #262a33; padding: 10px; border-radius: 6px; }
+  .legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px; margin-top: 8px; }
+  .legend div { background: #262a33; padding: 6px 8px; border-radius: 4px; }
+  .legend b { display: block; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Pixel office — art preview</h1>
+  <p>Original sprites drawn as pixel arrays (16×20 px characters, 3× / 5× scale). Nothing here is from Pixel Agents, Metro City, or Donarg.</p>
+
+  <canvas id="scene" class="scene"></canvas>
+  <div class="controls" id="controls"></div>
+
+  <h2>Sprite sheet — every frame for every character</h2>
+  <div class="sheet"><canvas id="sheet"></canvas></div>
+  <div class="legend" id="legend"></div>
+</main>
+
+<script>
+// ---------- palette & sprite data ----------
+const W = 16, H = 20;
+
+// Base front-facing idle pose. '.' transparent.
+// H hair, S skin, E eye, B shirt, P pants, F shoes, A accessory, W paper, L paper lines
+const BASE = [
+  "......HHHH......",
+  ".....HHHHHH.....",
+  "....HHHHHHHH....",
+  "....HHSSSSHH....",
+  "....HSSSSSSH....",
+  "....HSESSESH....",
+  ".....SSSSSS.....",
+  ".....SSSSSS.....",
+  "......SSSS......",
+  "....BBBBBBBB....",
+  "...BBBBBBBBBB...",
+  "..SBBBBBBBBBBS..",
+  "..SBBBBBBBBBBS..",
+  "..S.BBBBBBBB.S..",
+  "....BBBBBBBB....",
+  "....PPPPPPPP....",
+  "....PPP..PPP....",
+  "....PPP..PPP....",
+  "....FFF..FFF....",
+  "....FFF..FFF....",
+];
+
+function withRows(base, overrides) {
+  const out = base.slice();
+  for (const [row, str] of Object.entries(overrides)) out[+row] = str;
+  return out;
+}
+function setCell(rows, r, c, ch) {
+  rows[r] = rows[r].substring(0, c) + ch + rows[r].substring(c + 1);
+}
+
+const POSES = {
+  idle: [BASE],
+  walk: [
+    BASE,
+    withRows(BASE, { 17: "....FFF..PPP....", 18: "....FFF..FFF....", 19: ".........FFF...." }),
+    BASE,
+    withRows(BASE, { 17: "....PPP..FFF....", 18: "....FFF..FFF....", 19: "....FFF........." }),
+  ],
+  type: [
+    withRows(BASE, { 11: "...BBBBBBBBBB...", 12: "...BBBBBBBBBB...", 13: "...SBBBBBBBBB...", 14: "....BBBBBBBBS..." }),
+    withRows(BASE, { 11: "...BBBBBBBBBB...", 12: "...BBBBBBBBBB...", 13: "...BBBBBBBBBS...", 14: "...SBBBBBBBB...." }),
+  ],
+  carry: [
+    withRows(BASE, {
+      10: "...BBBBBBBBBB...",
+      11: "..SWWWWWWWWWWS..",
+      12: "..SWLLLLLLLLWS..",
+      13: "..SWWWWWWWWWWS..",
+      14: "...WWLLLLLLWW...",
+    }),
+  ],
+};
+
+// Characters: name, colors, accessory painter
+const CHARACTERS = [
+  { name: "Intake", role: "Reads your description", colors: { H: "#6b3e1e", S: "#f1c9a5", E: "#222", B: "#2aa198", P: "#2d3a55", F: "#1a1a1a", A: "#333" },
+    acc: r => { r[1] = ".....AAAAAA....."; setCell(r, 5, 4, "A"); setCell(r, 6, 4, "A"); setCell(r, 7, 4, "A"); setCell(r, 7, 5, "A"); } },
+  { name: "Designer", role: "Writes the spec", colors: { H: "#e0b04a", S: "#f7d6bd", E: "#222", B: "#8e5bd9", P: "#3a3a4a", F: "#1a1a1a", A: "#f5d400" },
+    acc: r => { setCell(r, 3, 11, "A"); setCell(r, 4, 11, "A"); setCell(r, 2, 11, "A"); } },
+  { name: "Parts Buyer", role: "Builds the parts list", colors: { H: "#2b1b12", S: "#c68e5a", E: "#222", B: "#e8792b", P: "#3b4a6b", F: "#2a1a0a", A: "#d8473a" },
+    acc: r => { r[0] = "......AAAA......"; r[1] = ".....AAAAAA....."; r[2] = "....AAAAAAAA...."; r[3] = "...AAASSSSAAA..."; } },
+  { name: "Critic", role: "Finds the problems", colors: { H: "#b8bcc6", S: "#f1c9a5", E: "#222", B: "#c43b3b", P: "#2a2a2a", F: "#1a1a1a", A: "#1d1d1d" },
+    acc: r => { r[5] = "....HAEAAEAH...."; } },
+  { name: "Reviser", role: "Fixes what the critic found", colors: { H: "#1f1f1f", S: "#8d5a3b", E: "#111", B: "#3f9d4a", P: "#2d3a55", F: "#1a1a1a", A: "#1f1f1f" },
+    acc: r => { setCell(r, 6, 4, "H"); setCell(r, 7, 4, "H"); setCell(r, 8, 4, "H"); setCell(r, 8, 5, "H"); } },
+  { name: "Report Writer", role: "Writes the final build guide", colors: { H: "#141414", S: "#e9b48a", E: "#111", B: "#3a6fd8", P: "#242a3a", F: "#1a1a1a", A: "#f0e6d2" },
+    acc: r => { setCell(r, 9, 7, "A"); setCell(r, 9, 8, "A"); setCell(r, 10, 7, "A"); setCell(r, 10, 8, "A"); setCell(r, 11, 7, "A"); setCell(r, 11, 8, "A"); setCell(r, 12, 7, "A"); } },
+];
+
+const PAPER = { W: "#f4f4ee", L: "#8a8f99" };
+
+function buildFrame(rows, char) {
+  const r = rows.slice();
+  char.acc(r);
+  const c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  const g = c.getContext("2d");
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const k = r[y][x];
+    if (k === ".") continue;
+    g.fillStyle = PAPER[k] || char.colors[k] || "#f0f";
+    g.fillRect(x, y, 1, 1);
+  }
+  // 1px dark outline around the silhouette for readability on any floor
+  const o = document.createElement("canvas");
+  o.width = W + 2; o.height = H + 2;
+  const og = o.getContext("2d");
+  og.fillStyle = "#15161c";
+  for (const [dx, dy] of [[0,1],[2,1],[1,0],[1,2]]) og.drawImage(c, dx, dy);
+  og.globalCompositeOperation = "source-in"; og.fillRect(0, 0, o.width, o.height);
+  og.globalCompositeOperation = "source-over"; og.drawImage(c, 1, 1);
+  return o;
+}
+
+for (const ch of CHARACTERS) {
+  ch.frames = {};
+  for (const [pose, list] of Object.entries(POSES)) ch.frames[pose] = list.map(rows => buildFrame(rows, ch));
+}
+
+// ---------- props (drawn with rects) ----------
+function drawFloor(g, w, h) {
+  const t = 8;
+  for (let y = 0; y < h; y += t) for (let x = 0; x < w; x += t) {
+    g.fillStyle = ((x + y) / t) % 2 ? "#5d4f3e" : "#66573f";
+    g.fillRect(x, y, t, t);
+  }
+  g.fillStyle = "#2f3a55"; g.fillRect(0, 0, w, 14); // wall
+  g.fillStyle = "#26304a"; g.fillRect(0, 14, w, 2);  // skirting
+}
+function drawDesk(g, x, y) {
+  g.fillStyle = "#3b2a1a"; g.fillRect(x, y + 6, 30, 2);
+  g.fillStyle = "#a9733f"; g.fillRect(x, y, 30, 6);
+  g.fillStyle = "#c48a4e"; g.fillRect(x, y, 30, 1);
+  g.fillStyle = "#3b2a1a"; g.fillRect(x + 2, y + 8, 2, 5); g.fillRect(x + 26, y + 8, 2, 5);
+  g.fillStyle = "#1b1b22"; g.fillRect(x + 10, y - 8, 10, 8);  // monitor
+  g.fillStyle = "#59c2ff"; g.fillRect(x + 11, y - 7, 8, 6);
+  g.fillStyle = "#1b1b22"; g.fillRect(x + 14, y, 2, 1);
+  g.fillStyle = "#d9d9d9"; g.fillRect(x + 3, y + 2, 6, 2);  // keyboard
+}
+function drawTable(g, x, y) {
+  g.fillStyle = "#4a3a2a"; g.fillRect(x, y + 6, 26, 2);
+  g.fillStyle = "#7a5a3a"; g.fillRect(x, y, 26, 6);
+  g.fillStyle = "#f4f4ee"; g.fillRect(x + 8, y + 1, 10, 4);
+  g.fillStyle = "#8a8f99"; g.fillRect(x + 9, y + 2, 8, 1); g.fillRect(x + 9, y + 4, 6, 1);
+}
+function drawBubble(g, x, y, kind) {
+  g.fillStyle = "#15161c"; g.fillRect(x - 1, y - 1, 14, 12); g.fillRect(x + 4, y + 11, 3, 2);
+  g.fillStyle = "#fffdf5"; g.fillRect(x, y, 12, 10); g.fillRect(x + 5, y + 10, 2, 2);
+  g.fillStyle = kind === "warn" ? "#d9342b" : "#3f7bd9";
+  if (kind === "warn") { g.fillRect(x + 5, y + 2, 2, 4); g.fillRect(x + 5, y + 7, 2, 1); }
+  else { g.fillRect(x + 4, y + 2, 4, 1); g.fillRect(x + 7, y + 3, 1, 2); g.fillRect(x + 5, y + 5, 2, 1); g.fillRect(x + 5, y + 7, 2, 1); }
+}
+function drawBadge(g, x, y, ok) {
+  g.fillStyle = "#15161c"; g.fillRect(x - 1, y - 1, 9, 9);
+  g.fillStyle = ok ? "#2fb85a" : "#d9342b"; g.fillRect(x, y, 7, 7);
+  g.fillStyle = "#fff";
+  if (ok) { g.fillRect(x + 1, y + 3, 1, 1); g.fillRect(x + 2, y + 4, 1, 1); g.fillRect(x + 3, y + 3, 1, 1); g.fillRect(x + 4, y + 2, 1, 1); g.fillRect(x + 5, y + 1, 1, 1); }
+  else { for (let i = 0; i < 5; i++) { g.fillRect(x + 1 + i, y + 1 + i, 1, 1); g.fillRect(x + 5 - i, y + 1 + i, 1, 1); } }
+}
+
+// ---------- scene ----------
+const SCALE = 3;
+const SW = 48 * 6 + 40, SH = 96;
+const scene = document.getElementById("scene");
+scene.width = SW; scene.height = SH;
+scene.style.width = (SW * SCALE) + "px";
+const sg = scene.getContext("2d");
+
+const STATES = ["idle", "typing", "walk", "carry", "waiting", "done", "failed"];
+let mode = "demo";
+let t = 0;
+let demoSeq = [];
+
+function stationX(i) { return 12 + i * 48; }
+const DESK_Y = 48;
+
+function charStateAt(i, time) {
+  if (mode !== "demo") return { state: mode, x: stationX(i) + 7, y: DESK_Y - 22, bubble: null };
+  // Honest-looking demo sequence: each step runs ~2s, hands off, critic finds problem, approval, done.
+  const step = Math.floor(time / 2) % 10;
+  const phase = (time / 2) % 1;
+  const order = [0, 1, 2, 3, 4, 3, 5]; // intake, designer, parts, critic, reviser, critic, writer
+  const sx = stationX(i) + 7, sy = DESK_Y - 22;
+  if (step < 7) {
+    const active = order[step];
+    if (i === active) return { state: phase < 0.75 ? "typing" : "carry", x: sx + (phase > 0.75 ? (phase - 0.75) * 4 * 30 * (step === 3 && order[step+1] === 4 ? 1 : 1) : 0), y: sy, bubble: step === 3 && phase > 0.75 ? "warn" : null };
+    return { state: "idle", x: sx, y: sy, bubble: null };
+  }
+  if (step === 7) return { state: i === 5 ? "waiting" : "idle", x: sx, y: sy, bubble: i === 5 ? "ask" : null };
+  if (step === 8) return { state: i === 5 ? "typing" : "idle", x: sx, y: sy, bubble: null };
+  return { state: "done", x: sx, y: sy, bubble: null };
+}
+
+function frameFor(ch, state, time) {
+  const f = ch.frames;
+  switch (state) {
+    case "typing": return f.type[Math.floor(time * 6) % 2];
+    case "walk": return f.walk[Math.floor(time * 8) % 4];
+    case "carry": return f.carry[0];
+    default: return f.idle[0];
+  }
+}
+
+function render(time) {
+  sg.clearRect(0, 0, SW, SH);
+  drawFloor(sg, SW, SH);
+  CHARACTERS.forEach((ch, i) => {
+    const s = charStateAt(i, time);
+    const bob = (s.state === "walk" || s.state === "carry") && Math.floor(time * 8) % 2 ? -1 : 0;
+    const x = s.state === "walk" && mode !== "demo" ? s.x + Math.round(Math.sin(time * 2 + i) * 6) : s.x;
+    sg.drawImage(frameFor(ch, s.state, time), Math.round(x) - 1, Math.round(s.y) - 1 + bob);
+    drawDesk(sg, stationX(i), DESK_Y);
+    if (s.state === "waiting" || s.bubble === "ask") drawBubble(sg, x + 12, s.y - 10, "ask");
+    if (s.bubble === "warn") drawBubble(sg, x + 12, s.y - 10, "warn");
+    if (s.state === "done") drawBadge(sg, x + 12, s.y - 6, true);
+    if (s.state === "failed") drawBadge(sg, x + 12, s.y - 6, false);
+    sg.fillStyle = "#15161c"; sg.fillRect(stationX(i) - 2, DESK_Y + 16, 34, 9);
+    sg.fillStyle = "#e6e6e6"; sg.font = "7px monospace"; sg.textBaseline = "top";
+    sg.fillText(ch.name.length > 9 ? ch.name.slice(0, 9) : ch.name, stationX(i), DESK_Y + 17);
+    const label = s.state === "done" ? "Done" : s.state === "failed" ? "Failed" : s.state === "waiting" ? "Needs you" : s.state === "idle" ? "" : s.state === "carry" ? "Handing off" : s.state === "typing" ? "Working" : "Walking";
+    if (label) { sg.fillStyle = "#ffd166"; sg.fillText(label, stationX(i), DESK_Y + 26); }
+  });
+  drawTable(sg, stationX(6) + 2, DESK_Y);
+  sg.fillStyle = "#e6e6e6"; sg.font = "7px monospace"; sg.fillText("Review", stationX(6) + 2, DESK_Y + 17);
+}
+
+let last = 0;
+function loop(ms) { t = ms / 1000; render(t); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+
+// controls
+const controls = document.getElementById("controls");
+for (const m of ["demo", ...STATES]) {
+  const b = document.createElement("button");
+  b.textContent = m === "demo" ? "Play sequence" : m;
+  if (m === mode) b.classList.add("on");
+  b.onclick = () => { mode = m; [...controls.children].forEach(c => c.classList.toggle("on", c === b)); };
+  controls.appendChild(b);
+}
+
+// ---------- sprite sheet ----------
+const sheet = document.getElementById("sheet");
+const cols = 1 + 4 + 2 + 1; // idle, walk×4, type×2, carry
+const cell = 22, pad = 4, labelW = 70;
+sheet.width = labelW + cols * (cell + pad) + 60; sheet.height = CHARACTERS.length * (H + 10) + 14;
+const shg = sheet.getContext("2d");
+shg.fillStyle = "#262a33"; shg.fillRect(0, 0, sheet.width, sheet.height);
+shg.fillStyle = "#a7abb6"; shg.font = "7px monospace"; shg.textBaseline = "top";
+["idle", "walk1", "walk2", "walk3", "walk4", "type1", "type2", "carry"].forEach((n, i) => shg.fillText(n, labelW + i * (cell + pad), 2));
+CHARACTERS.forEach((ch, r) => {
+  const y = 12 + r * (H + 10);
+  shg.fillStyle = "#e6e6e6"; shg.fillText(ch.name, 2, y + 6);
+  const frames = [ch.frames.idle[0], ...ch.frames.walk, ...ch.frames.type, ch.frames.carry[0]];
+  frames.forEach((f, i) => shg.drawImage(f, labelW + i * (cell + pad), y));
+});
+drawBubble(shg, sheet.width - 50, 14, "ask"); drawBubble(shg, sheet.width - 30, 14, "warn");
+drawBadge(shg, sheet.width - 50, 34, true); drawBadge(shg, sheet.width - 36, 34, false);
+sheet.style.width = (sheet.width * 5) + "px";
+
+const legend = document.getElementById("legend");
+for (const ch of CHARACTERS) {
+  const d = document.createElement("div");
+  d.innerHTML = `<b>${ch.name}</b>${ch.role}`;
+  legend.appendChild(d);
+}
+</script>
+</body>
+</html>

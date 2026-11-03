@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BardalesLabs pixel office — alternative styles</title>
+<style>
+  body { margin: 0; background: #1b1d24; color: #e6e6e6; font: 14px/1.4 system-ui, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 4px; }
+  p { color: #a7abb6; margin: 0 0 12px; }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; max-width: 100%; }
+  .scene { background: #000; border: 2px solid #333; border-radius: 6px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 6px; position: sticky; top: 0; background: #1b1d24; padding: 8px 0; z-index: 2; }
+  button { background: #2b2f3a; color: #e6e6e6; border: 1px solid #444; border-radius: 4px; padding: 6px 10px; cursor: pointer; }
+  button.on { background: #3f7bd9; border-color: #3f7bd9; }
+  a { color: #7fb3ff; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Alternative styles</h1>
+  <p>Same six characters and states as <a href="preview.html">preview.html</a> (style A, flat front-view). All art is original, generated from pixel/voxel data in this file.</p>
+
+  <div class="controls" id="controls"></div>
+
+  <h2>Style B — Isometric voxel ("3D")</h2>
+  <p>Every object is built from shaded unit cubes in a 2:1 isometric projection. Handoff walks happen along the floor diagonal; the office can be rotated or extended later because it is real 3D data.</p>
+  <canvas id="iso" class="scene"></canvas>
+
+  <h2>Style C — 3/4 top-down, shaded</h2>
+  <p>RPG-style camera: taller 16×24 characters with two-tone shading, visible desk tops, wall with depth. Closest to the Pixel Agents look, without using any of their assets.</p>
+  <canvas id="topdown" class="scene"></canvas>
+</main>
+
+<script>
+// ============ shared ============
+const STATES = ["idle", "typing", "walk", "carry", "waiting", "done", "failed"];
+let mode = "demo";
+const CHARS = [
+  { name: "Intake",        acc: "headset", c: { H: "#6b3e1e", S: "#f1c9a5", B: "#2aa198", P: "#2d3a55", F: "#1a1a1a", A: "#333333" } },
+  { name: "Designer",      acc: "pencil",  c: { H: "#e0b04a", S: "#f7d6bd", B: "#8e5bd9", P: "#3a3a4a", F: "#1a1a1a", A: "#f5d400" } },
+  { name: "Parts Buyer",   acc: "cap",     c: { H: "#2b1b12", S: "#c68e5a", B: "#e8792b", P: "#3b4a6b", F: "#2a1a0a", A: "#d8473a" } },
+  { name: "Critic",        acc: "glasses", c: { H: "#b8bcc6", S: "#f1c9a5", B: "#c43b3b", P: "#2a2a2a", F: "#1a1a1a", A: "#1d1d1d" } },
+  { name: "Reviser",       acc: "bun",     c: { H: "#1f1f1f", S: "#8d5a3b", B: "#3f9d4a", P: "#2d3a55", F: "#1a1a1a", A: "#1f1f1f" } },
+  { name: "Report Writer", acc: "tie",     c: { H: "#141414", S: "#e9b48a", B: "#3a6fd8", P: "#242a3a", F: "#1a1a1a", A: "#f0e6d2" } },
+];
+const PAPER = "#f4f4ee", LINES = "#8a8f99", EYE = "#1a1a1a";
+
+function shade(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.min(255, Math.round(((n >> 16) & 255) * f)), g = Math.min(255, Math.round(((n >> 8) & 255) * f)), b = Math.min(255, Math.round((n & 255) * f));
+  return `rgb(${r},${g},${b})`;
+}
+
+// Demo sequence shared by both scenes: returns {state, bubble, offset} for character i at time t.
+const ORDER = [0, 1, 2, 3, 4, 3, 5];
+function demoState(i, t) {
+  if (mode !== "demo") return { state: mode, bubble: mode === "waiting" ? "ask" : null, prog: 0 };
+  const step = Math.floor(t / 2) % 10, phase = (t / 2) % 1;
+  if (step < 7) {
+    if (i !== ORDER[step]) return { state: "idle", bubble: null, prog: 0 };
+    if (phase < 0.7) return { state: "typing", bubble: null, prog: 0 };
+    return { state: "carry", bubble: step === 3 ? "warn" : null, prog: (phase - 0.7) / 0.3 };
+  }
+  if (step === 7) return { state: i === 5 ? "waiting" : "idle", bubble: i === 5 ? "ask" : null, prog: 0 };
+  if (step === 8) return { state: i === 5 ? "typing" : "idle", bubble: null, prog: 0 };
+  return { state: "done", bubble: null, prog: 0 };
+}
+const LABEL = { done: "Done", failed: "Failed", waiting: "Needs you", carry: "Handing off", typing: "Working", walk: "Walking", idle: "" };
+
+function makeScaled(canvas, w, h, scale) {
+  const off = document.createElement("canvas"); off.width = w; off.height = h;
+  canvas.width = w * scale; canvas.height = h * scale; canvas.style.width = (w * scale) + "px";
+  const g = canvas.getContext("2d"); g.imageSmoothingEnabled = false;
+  return { off, og: off.getContext("2d"), g, w, h, scale };
+}
+function text(g, s, x, y, scale, color = "#e6e6e6") {
+  g.fillStyle = "#15161c"; g.fillRect(x * scale - 2, y * scale - 2, s.length * 6.2 + 4, 13);
+  g.fillStyle = color; g.font = "10px monospace"; g.textBaseline = "top"; g.fillText(s, x * scale, y * scale);
+}
+
+// ============ Style B: isometric voxel ============
+const TW = 8, ZH = 5;
+const ISO = makeScaled(document.getElementById("iso"), 196, 128, 4);
+const OX = 44, OY = 34;
+function P(x, y, z) { return [OX + (x - y) * (TW / 2), OY + (x + y) * 2 - z * ZH]; }
+
+function cube(g, x, y, z, color, opts = {}) {
+  const [sx, sy] = P(x, y, z);
+  const top = shade(color, 1.25), left = color, right = shade(color, 0.7);
+  g.fillStyle = top;
+  g.fillRect(sx - 1, sy, 2, 1); g.fillRect(sx - 3, sy + 1, 6, 2); g.fillRect(sx - 1, sy + 3, 2, 1);
+  g.fillStyle = left;
+  g.fillRect(sx - 3, sy + 3, 2, ZH); g.fillRect(sx - 1, sy + 4, 1, ZH);
+  g.fillStyle = right;
+  g.fillRect(sx, sy + 4, 1, ZH); g.fillRect(sx + 1, sy + 3, 2, ZH);
+  for (const d of opts.decals || []) { g.fillStyle = d.c; g.fillRect(sx + d.dx, sy + d.dy, d.w, d.h); }
+}
+function diamond(g, x, y, z, color) {
+  const [sx, sy] = P(x, y, z);
+  g.fillStyle = color;
+  g.fillRect(sx - 1, sy, 2, 1); g.fillRect(sx - 3, sy + 1, 6, 2); g.fillRect(sx - 1, sy + 3, 2, 1);
+}
+
+function voxelCharacter(ch, cx, cy, state, frame) {
+  const c = ch.c, v = [];
+  const add = (x, y, z, col, decals) => v.push({ x: cx + x, y: cy + y, z, c: col, decals });
+  // legs
+  const lf = state === "walk" && frame === 1 ? 1 : 0, rf = state === "walk" && frame === 3 ? 1 : 0;
+  add(0, lf, 0, c.F); add(1, rf, 0, c.F); add(0, 0, 1, c.P); add(1, 0, 1, c.P);
+  // torso
+  const tieD = ch.acc === "tie" ? [{ dx: -4, dy: 3, w: 2, h: 4, c: c.A }] : null;
+  add(0, 0, 2, c.B); add(1, 0, 2, c.B); add(0, 0, 3, c.B); add(1, 0, 3, c.B, tieD);
+  // arms
+  if (state === "typing") {
+    add(-1, 0, 3, c.B); add(2, 0, 3, c.B);
+    add(-1, 1, frame === 0 ? 2 : 3, c.S); add(2, 1, frame === 0 ? 3 : 2, c.S);
+  } else if (state === "carry") {
+    add(-1, 0, 3, c.B); add(2, 0, 3, c.B); add(-1, 1, 2, c.S); add(2, 1, 2, c.S);
+    const ln = [{ dx: -3, dy: 5, w: 3, h: 1, c: LINES }];
+    add(0, 1, 2, PAPER, ln); add(1, 1, 2, PAPER, ln); add(0, 1, 3, PAPER, ln); add(1, 1, 3, PAPER, ln);
+  } else {
+    add(-1, 0, 3, c.B); add(2, 0, 3, c.B); add(-1, 0, 2, c.S); add(2, 0, 2, c.S);
+  }
+  // head: fringe + eyes as decals on the front (left) face
+  const face = ch.acc === "glasses"
+    ? [{ dx: -3, dy: 3, w: 3, h: 2, c: c.H }, { dx: -3, dy: 6, w: 3, h: 1, c: c.A }]
+    : [{ dx: -3, dy: 3, w: 3, h: 2, c: c.H }, { dx: -2, dy: 6, w: 1, h: 1, c: EYE }];
+  add(0, 0, 4, c.S); add(1, 0, 4, c.S); add(0, 0, 5, c.S, face); add(1, 0, 5, c.S, face);
+  add(0, -1, 5, c.H); add(1, -1, 5, c.H);
+  const hair = ch.acc === "cap" ? c.A : c.H;
+  add(0, 0, 6, hair); add(1, 0, 6, hair);
+  if (ch.acc === "cap") { add(0, 1, 6, c.A); add(1, 1, 6, c.A); }
+  if (ch.acc === "headset") { add(-1, 0, 5, c.A); add(2, 0, 5, c.A); }
+  if (ch.acc === "pencil") add(2, 0, 5, c.A);
+  if (ch.acc === "bun") add(0, 0, 7, c.H);
+  return v;
+}
+function voxelDesk(cx, cy) {
+  const v = [], wood = "#a9733f";
+  for (let x = -1; x <= 2; x++) for (let y = 2; y <= 3; y++) for (let z = 0; z <= 1; z++) {
+    const kb = z === 1 && y === 3 && (x === 0 || x === 1) ? [{ dx: -2, dy: 1, w: 4, h: 1, c: "#d9d9d9" }] : null;
+    v.push({ x: cx + x, y: cy + y, z, c: wood, decals: kb });
+  }
+  const scr = [{ dx: -3, dy: 3, w: 3, h: 4, c: "#59c2ff" }];
+  v.push({ x: cx, y: cy + 2, z: 2, c: "#1b1b22", decals: scr }); v.push({ x: cx + 1, y: cy + 2, z: 2, c: "#1b1b22", decals: scr });
+  return v;
+}
+function voxelTable(cx, cy) {
+  const v = [];
+  for (let x = 0; x <= 2; x++) for (let y = 0; y <= 1; y++) for (let z = 0; z <= 1; z++) {
+    const paper = z === 1 && x === 1 ? [{ dx: -2, dy: 1, w: 4, h: 2, c: PAPER }] : null;
+    v.push({ x: cx + x, y: cy + y, z, c: "#7a5a3a", decals: paper });
+  }
+  return v;
+}
+function isoBubble(g, sx, sy, kind) {
+  g.fillStyle = "#15161c"; g.fillRect(sx - 1, sy - 1, 12, 10); g.fillRect(sx + 3, sy + 9, 3, 2);
+  g.fillStyle = "#fffdf5"; g.fillRect(sx, sy, 10, 8); g.fillRect(sx + 4, sy + 8, 2, 2);
+  g.fillStyle = kind === "warn" ? "#d9342b" : "#3f7bd9";
+  if (kind === "warn") { g.fillRect(sx + 4, sy + 1, 2, 4); g.fillRect(sx + 4, sy + 6, 2, 1); }
+  else { g.fillRect(sx + 3, sy + 1, 4, 1); g.fillRect(sx + 6, sy + 2, 1, 2); g.fillRect(sx + 4, sy + 4, 2, 1); g.fillRect(sx + 4, sy + 6, 2, 1); }
+}
+function badge(g, sx, sy, ok) {
+  g.fillStyle = "#15161c"; g.fillRect(sx - 1, sy - 1, 9, 9);
+  g.fillStyle = ok ? "#2fb85a" : "#d9342b"; g.fillRect(sx, sy, 7, 7);
+  g.fillStyle = "#fff";
+  if (ok) [[1,3],[2,4],[3,3],[4,2],[5,1]].forEach(([a,b]) => g.fillRect(sx + a, sy + b, 1, 1));
+  else for (let i = 0; i < 5; i++) { g.fillRect(sx + 1 + i, sy + 1 + i, 1, 1); g.fillRect(sx + 5 - i, sy + 1 + i, 1, 1); }
+}
+
+function renderIso(t) {
+  const { og, g, w, h, scale } = ISO;
+  og.fillStyle = "#101218"; og.fillRect(0, 0, w, h);
+  const items = [];
+  // floor
+  for (let x = -2; x <= 38; x++) for (let y = -1; y <= 6; y++) diamond(og, x, y, -1, (x + y) % 2 ? "#5d4f3e" : "#66573f");
+  // wall along the back
+  for (let x = -2; x <= 38; x++) for (let z = 0; z <= 3; z++) items.push({ x, y: -2, z, c: z === 0 ? "#26304a" : "#2f3a55" });
+  const labels = [];
+  CHARS.forEach((ch, i) => {
+    const cx = i * 6 + 1, cy = 1;
+    const s = demoState(i, t);
+    const frame = s.state === "typing" ? Math.floor(t * 6) % 2 : s.state === "walk" ? Math.floor(t * 8) % 4 : 0;
+    // handoff: slide along x toward the next desk while carrying (demo only)
+    const dx = s.state === "carry" && mode === "demo" ? s.prog * 4 : 0;
+    items.push(...voxelCharacter(ch, cx + dx, cy + (s.state === "carry" ? 1 : 0), s.state, frame).map(v => ({ ...v, bob: (s.state === "walk" || s.state === "carry") && Math.floor(t * 8) % 2 ? -1 : 0 })));
+    items.push(...voxelDesk(cx, cy));
+    labels.push({ ch, s, cx, cy });
+  });
+  items.push(...voxelTable(38, 2));
+  items.sort((a, b) => (a.x + a.y) - (b.x + b.y) || a.z - b.z);
+  for (const it of items) {
+    if (it.bob) og.save(), og.translate(0, it.bob);
+    cube(og, it.x, it.y, it.z, it.c, { decals: it.decals });
+    if (it.bob) og.restore();
+  }
+  for (const { ch, s, cx, cy } of labels) {
+    const [hx, hy] = P(cx + 1, cy, 9);
+    if (s.bubble) isoBubble(og, hx + 2, hy - 4, s.bubble);
+    if (s.state === "done") badge(og, hx + 2, hy, true);
+    if (s.state === "failed") badge(og, hx + 2, hy, false);
+  }
+  g.clearRect(0, 0, g.canvas.width, g.canvas.height);
+  g.drawImage(ISO.off, 0, 0, w * scale, h * scale);
+  for (const { ch, s, cx, cy } of labels) {
+    const [lx, ly] = P(cx - 1, cy + 4, 0);
+    text(g, ch.name.slice(0, 9), lx - 6, ly + 2, scale);
+    if (LABEL[s.state]) text(g, LABEL[s.state], lx - 6, ly + 6, scale, "#ffd166");
+  }
+  const [tx, ty] = P(38, 4, 0); text(g, "Review", tx - 8, ty + 4, scale);
+}
+
+// ============ Style C: 3/4 top-down shaded ============
+const TD = makeScaled(document.getElementById("topdown"), 316, 110, 3);
+const BASE24 = [
+  "......hhhh......",
+  "....hhHHHHhh....",
+  "...hHHHHHHHHh...",
+  "...hHHHHHHHHh...",
+  "...hhHHHHHHhh...",
+  "...hSSSSSSSSh...",
+  "...hSSSSSSSSh...",
+  "...hSESSSSESh...",
+  "....SSSSSSSS....",
+  "....sSSSSSSs....",
+  ".....ssSSss.....",
+  "......ssss......",
+  "....BBBBBBBB....",
+  "..bBBBBBBBBBBb..",
+  ".sbBBBBBBBBBBbs.",
+  ".sbBBBBBBBBBBbs.",
+  ".s.bBBBBBBBBb.s.",
+  "....bbBBBBbb....",
+  "....PPPPPPPP....",
+  "....PPPPPPPP....",
+  "....PPp..pPP....",
+  "....PPp..pPP....",
+  "....FFF..FFF....",
+  "....FFF..FFF....",
+];
+const rows = (o) => { const r = BASE24.slice(); for (const k in o) r[+k] = o[k]; return r; };
+const set = (r, y, x, ch) => { r[y] = r[y].slice(0, x) + ch + r[y].slice(x + 1); };
+const POSES24 = {
+  idle: [BASE24],
+  walk: [BASE24,
+    rows({ 21: "....FFF..pPP....", 22: "....FFF..FFF....", 23: ".........FFF...." }),
+    BASE24,
+    rows({ 21: "....PPp..FFF....", 22: "....FFF..FFF....", 23: "....FFF........." })],
+  typing: [
+    rows({ 13: "...bBBBBBBBBb...", 14: "...bBBBBBBBBb...", 15: "...bBBBBBBBBb...", 16: "...sbBBBBBBbb...", 17: "....bbBBBBbs...." }),
+    rows({ 13: "...bBBBBBBBBb...", 14: "...bBBBBBBBBb...", 15: "...bBBBBBBBBb...", 16: "...bbBBBBBBbs...", 17: "....sbBBBBbb...." })],
+  carry: [rows({ 13: "..sWWWWWWWWWWs..", 14: "..sWLLLLLLLLWs..", 15: "..sWWWWWWWWWWs..", 16: "...WWLLLLLLWW...", 17: "....bbBBBBbb...." })],
+};
+function applyAcc24(r, acc) {
+  switch (acc) {
+    case "headset": r[2] = "...AAAAAAAAAA..."; set(r, 5, 3, "A"); set(r, 6, 3, "A"); set(r, 7, 3, "A"); set(r, 8, 3, "A"); set(r, 9, 3, "A"); set(r, 9, 4, "A"); break;
+    case "pencil": set(r, 3, 12, "A"); set(r, 4, 12, "A"); set(r, 5, 12, "A"); set(r, 6, 12, "A"); break;
+    case "cap": r[0] = "......AAAA......"; r[1] = "....AAAAAAAA...."; r[2] = "...AAAAAAAAAA..."; r[3] = "...AAAAAAAAAA..."; r[4] = "..AAAAAAAAAAAA.."; break;
+    case "glasses": r[7] = "...hAEAAAAEAh..."; break;
+    case "bun": r[0] = "....hh.hhhh....."; set(r, 1, 3, "h"); set(r, 8, 3, "h"); set(r, 9, 3, "h"); set(r, 10, 3, "h"); set(r, 10, 4, "h"); break;
+    case "tie": set(r, 12, 7, "A"); set(r, 12, 8, "A"); set(r, 13, 7, "A"); set(r, 13, 8, "A"); set(r, 14, 7, "A"); set(r, 14, 8, "A"); set(r, 15, 7, "A"); set(r, 15, 8, "A"); set(r, 16, 7, "A"); break;
+  }
+}
+function frame24(ch, pose) {
+  const r = pose.slice(); applyAcc24(r, ch.acc);
+  const c = document.createElement("canvas"); c.width = 18; c.height = 26;
+  const g = c.getContext("2d");
+  const col = { H: ch.c.H, h: shade(ch.c.H, 0.65), S: ch.c.S, s: shade(ch.c.S, 0.75), B: ch.c.B, b: shade(ch.c.B, 0.65), P: ch.c.P, p: shade(ch.c.P, 0.65), F: ch.c.F, A: ch.c.A, E: EYE, W: PAPER, L: LINES };
+  // outline
+  g.fillStyle = "#15161c";
+  for (let y = 0; y < 24; y++) for (let x = 0; x < 16; x++) if (r[y][x] !== ".") { g.fillRect(x, y + 1, 3, 1); g.fillRect(x + 1, y, 1, 3); }
+  for (let y = 0; y < 24; y++) for (let x = 0; x < 16; x++) { const k = r[y][x]; if (k === ".") continue; g.fillStyle = col[k] || "#f0f"; g.fillRect(x + 1, y + 1, 1, 1); }
+  return c;
+}
+for (const ch of CHARS) { ch.f24 = {}; for (const [p, list] of Object.entries(POSES24)) ch.f24[p] = list.map(r => frame24(ch, r)); }
+
+function drawDesk24(g, x, y) {
+  g.fillStyle = "#6b4526"; g.fillRect(x, y + 12, 32, 6);           // front face
+  g.fillStyle = "#3b2a1a"; g.fillRect(x, y + 18, 32, 1);
+  g.fillStyle = "#b07a44"; g.fillRect(x, y, 32, 12);               // top surface
+  g.fillStyle = "#c48a4e"; g.fillRect(x, y, 32, 1); g.fillRect(x, y + 3, 32, 1); g.fillRect(x, y + 8, 32, 1);
+  g.fillStyle = "#23232b"; g.fillRect(x + 11, y + 2, 10, 7);       // monitor back
+  g.fillStyle = "#3a3a46"; g.fillRect(x + 15, y + 4, 2, 2);        // logo
+  g.fillStyle = "#23232b"; g.fillRect(x + 15, y + 9, 2, 1); g.fillRect(x + 13, y + 10, 6, 1);
+  g.fillStyle = "#e6e6e6"; g.fillRect(x + 3, y + 7, 6, 3);          // notepad
+  g.fillStyle = "#8a8f99"; g.fillRect(x + 4, y + 8, 4, 1);
+  g.fillStyle = "#d8473a"; g.fillRect(x + 25, y + 6, 3, 3);          // mug
+}
+function drawTable24(g, x, y) {
+  g.fillStyle = "#5a4530"; g.fillRect(x, y + 10, 28, 5);
+  g.fillStyle = "#8d6a44"; g.fillRect(x, y, 28, 10);
+  g.fillStyle = PAPER; g.fillRect(x + 8, y + 2, 12, 6); g.fillStyle = LINES; g.fillRect(x + 9, y + 3, 10, 1); g.fillRect(x + 9, y + 5, 8, 1);
+}
+function drawFloor24(g, w, h) {
+  for (let y = 0; y < h; y += 6) for (let x = 0; x < w; x += 24) {
+    const off = (y / 6) % 2 ? 12 : 0;
+    g.fillStyle = (Math.floor((x + off) / 24) + y / 6) % 2 ? "#6a5a45" : "#73624a";
+    g.fillRect(x - off, y, 24, 6); g.fillStyle = "#5a4b39"; g.fillRect(x - off, y + 5, 24, 1); g.fillRect(x - off + 23, y, 1, 6);
+  }
+  g.fillStyle = "#2f3a55"; g.fillRect(0, 0, w, 20);
+  g.fillStyle = "#3a4766"; for (let x = 0; x < w; x += 10) g.fillRect(x, 4, 8, 1);
+  g.fillStyle = "#26304a"; g.fillRect(0, 20, w, 3);
+  g.fillStyle = "#1c2438"; g.fillRect(0, 23, w, 1);
+}
+function renderTD(t) {
+  const { og, g, w, h, scale } = TD;
+  og.clearRect(0, 0, w, h); drawFloor24(og, w, h);
+  const DESK_Y = 52, labels = [];
+  CHARS.forEach((ch, i) => {
+    const sx = 8 + i * 48, s = demoState(i, t);
+    const frame = s.state === "typing" ? Math.floor(t * 6) % 2 : s.state === "walk" ? Math.floor(t * 8) % 4 : 0;
+    const bob = (s.state === "walk" || s.state === "carry") && Math.floor(t * 8) % 2 ? -1 : 0;
+    const img = ch.f24[s.state === "typing" ? "typing" : s.state === "walk" ? "walk" : s.state === "carry" ? "carry" : "idle"][frame];
+    const dx = s.state === "carry" && mode === "demo" ? s.prog * 30 : 0;
+    const cx = sx + 7 + dx, cy = DESK_Y - 22 + bob;
+    if (dx === 0) { og.drawImage(img, cx, cy); drawDesk24(og, sx, DESK_Y); }
+    else { drawDesk24(og, sx, DESK_Y); og.drawImage(img, cx, DESK_Y + 2 + bob); }
+    const by = dx === 0 ? cy : DESK_Y + 2;
+    if (s.bubble) isoBubble(og, cx + 14, by - 8, s.bubble);
+    if (s.state === "done") badge(og, cx + 14, by - 4, true);
+    if (s.state === "failed") badge(og, cx + 14, by - 4, false);
+    labels.push({ ch, s, sx });
+  });
+  drawTable24(og, 8 + 6 * 48, DESK_Y);
+  g.clearRect(0, 0, g.canvas.width, g.canvas.height);
+  g.drawImage(TD.off, 0, 0, w * scale, h * scale);
+  for (const { ch, s, sx } of labels) {
+    text(g, ch.name.slice(0, 9), sx, DESK_Y + 22, scale);
+    if (LABEL[s.state]) text(g, LABEL[s.state], sx, DESK_Y + 27, scale, "#ffd166");
+  }
+  text(g, "Review", 8 + 6 * 48, DESK_Y + 22, scale);
+}
+
+// ============ loop + controls ============
+function loop(ms) { const t = ms / 1000; renderIso(t); renderTD(t); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+const controls = document.getElementById("controls");
+for (const m of ["demo", ...STATES]) {
+  const b = document.createElement("button");
+  b.textContent = m === "demo" ? "Play sequence" : m;
+  if (m === mode) b.classList.add("on");
+  b.onclick = () => { mode = m; [...controls.children].forEach(c => c.classList.toggle("on", c === b)); };
+  controls.appendChild(b);
+}
+</script>
+</body>
+</html>
