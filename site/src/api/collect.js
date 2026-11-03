@@ -1,7 +1,14 @@
 // Privacy-friendly analytics beacon + the tracker script served at /t.js.
 import { json, text, CORS, readJson, device, browser, host } from "./util.js";
+import { isAdmin } from "./auth.js";
 
 const BOT = /bot|crawl|spider|slurp|headless|lighthouse|preview|facebookexternalhit|whatsapp|curl|wget|python-requests/i;
+
+export const clientIp = (request) => request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "";
+async function excludedIps(env) {
+  const r = await env.DB.prepare("SELECT value FROM settings WHERE key = 'exclude_ips'").first().catch(() => null);
+  return new Set((r?.value || "").split(",").map(s => s.trim()).filter(Boolean));
+}
 
 export async function collect(request, env) {
   if (request.method === "OPTIONS") return text("", 204, CORS);
@@ -9,6 +16,9 @@ export async function collect(request, env) {
   if (!b || !b.p) return text("bad request", 400, CORS);
   const ua = request.headers.get("user-agent") || "";
   if (BOT.test(ua)) return text("", 204, CORS);
+  // never count the owner: signed-in admin browser, or an IP they excluded in Settings
+  if (await isAdmin(request, env)) return text("", 204, CORS);
+  if ((await excludedIps(env)).has(clientIp(request))) return text("", 204, CORS);
   const type = b.t === "event" ? "event" : "pageview";
   const path = String(b.u || "/").slice(0, 300), ref = host(b.r || "");
   const pageHost = host(request.headers.get("origin") || request.headers.get("referer") || "");
@@ -24,6 +34,7 @@ var s=document.currentScript||[].slice.call(document.scripts).pop(),p=(s&&s.getA
 api=(s&&s.src?new URL(s.src).origin:'')+'/api/collect',
 sid=(function(){try{var k='_bl_sid',v=sessionStorage.getItem(k);if(!v){v=Math.random().toString(36).slice(2)+Date.now().toString(36);sessionStorage.setItem(k,v)}return v}catch(e){return ''}})();
 if(/bot|crawl|spider|headless/i.test(navigator.userAgent))return;
+try{if(localStorage.getItem('_bl_ignore')==='1')return}catch(e){}
 function send(d){d.p=p;d.sid=sid;d.u=location.pathname+location.search;d.r=document.referrer;var b=JSON.stringify(d);
 if(navigator.sendBeacon){navigator.sendBeacon(api,new Blob([b],{type:'application/json'}))}else{fetch(api,{method:'POST',body:b,headers:{'content-type':'application/json'},keepalive:true}).catch(function(){})}}
 var last='';function view(){var u=location.pathname+location.search;if(u===last)return;last=u;send({t:'pageview'})}

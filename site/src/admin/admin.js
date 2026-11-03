@@ -156,6 +156,11 @@ function settingsView() {
     <tr><td>ASC_*</td><td><span class="pill pill--${state.asc?.configured ? "live" : "paused"}">${state.asc?.configured ? "set" : "missing"}</span></td><td>App Store Connect downloads.</td></tr>
     <tr><td>GITHUB_TOKEN</td><td><span class="pill pill--idea">optional</span></td><td>Raises GitHub API limits and allows private repos in Portfolio.</td></tr>
   </tbody></table><p class="muted">Set any of these with <code>npx wrangler secret put NAME</code> inside <code>site/</code>, then <code>npm run deploy</code>.</p></section>
+  <section class="card"><h2>Don't count me</h2>
+  <p class="muted">Your own visits are never counted while you're signed in here, and this browser is flagged to skip tracking. To also ignore your other devices on the same network (phone, laptop), exclude your IP:</p>
+  <p>Current IP: <code>${esc(state.settings.__ip || "?")}</code> ${(state.settings.exclude_ips || "").split(",").map(s => s.trim()).includes(state.settings.__ip) ? `<span class="pill pill--live">excluded</span>` : `<button class="btn" data-exclude-ip>Exclude my current IP</button>`}</p>
+  <label>Excluded IPs (comma separated)<input data-exclude-list value="${esc(state.settings.exclude_ips || "")}" /></label>
+  <p class="muted small">Home IPs can change every few weeks; come back and click the button again if your visits start showing up.</p></section>
   <section class="card"><h2>Tracking snippet</h2><pre>&lt;script defer src="${location.origin}/t.js" data-property="my-site"&gt;&lt;/script&gt;</pre></section>
   <section class="card"><h2>Data</h2><p class="muted">Raw events are kept 18 months. Export: <a href="/api/admin/stats?days=365" target="_blank">stats JSON</a> · <a href="/api/admin/inbox" target="_blank">inbox JSON</a> · <a href="/api/admin/items" target="_blank">items JSON</a>.</p></section>`;
 }
@@ -187,7 +192,7 @@ async function loadStats() { state.stats = await api(`stats?days=${state.days}&p
 // ---------- events
 root.addEventListener("submit", async (e) => {
   const f = e.target; e.preventDefault();
-  if (f.matches("[data-login]")) { try { state.err = ""; await api("login", { method: "POST", body: { password: new FormData(f).get("password") } }); state.authed = true; await loadAll(); } catch (err) { state.err = err.message.includes("401") || /wrong/.test(err.message) ? "Wrong password" : err.message; render(); } }
+  if (f.matches("[data-login]")) { try { state.err = ""; await api("login", { method: "POST", body: { password: new FormData(f).get("password") } }); state.authed = true; try { localStorage.setItem("_bl_ignore", "1"); } catch {} await loadAll(); } catch (err) { state.err = err.message.includes("401") || /wrong/.test(err.message) ? "Wrong password" : err.message; render(); } }
   else if (f.matches("[data-item-form]")) { const d = Object.fromEntries(new FormData(f)); await api("items", { method: "POST", body: d }); $("[data-dialog]").close(); await loadAll(); }
   else if (f.matches("[data-dl-form]")) { const d = Object.fromEntries(new FormData(f)); await api("downloads", { method: "POST", body: { app_id: f.dataset.dlForm, ...d } }); await loadAll(); }
 });
@@ -200,9 +205,11 @@ root.addEventListener("click", async (e) => {
   else if (t.matches("[data-edit]")) openItem(state.items.find(i => i.id === t.dataset.edit));
   else if (t.matches("[data-cancel]")) $("[data-dialog]").close();
   else if (t.matches("[data-delete]")) { const id = $("[data-item-form] [name=id]").value; if (confirm(`Delete "${id}" from the admin layer? (Items from the public data files come back as defaults.)`)) { await api("items", { method: "DELETE", body: { id, name: "x", type: "x" } }); $("[data-dialog]").close(); await loadAll(); } }
+  else if (t.matches("[data-exclude-ip]")) { const list = [...new Set([...(state.settings.exclude_ips || "").split(",").map(s => s.trim()).filter(Boolean), state.settings.__ip])]; await api("settings", { method: "POST", body: { exclude_ips: list.join(",") } }); await loadAll(); }
   else if (t.matches("[data-asc-pull]")) { t.disabled = true; const r = await api("appstore", { method: "POST" }); alert(JSON.stringify(r, null, 2)); await loadAll(); }
 });
 root.addEventListener("change", async (e) => {
+  if (e.target.matches("[data-exclude-list]")) { await api("settings", { method: "POST", body: { exclude_ips: e.target.value } }); await loadAll(); }
   if (e.target.matches("[data-property]")) { state.property = e.target.value; await loadStats(); }
   if (e.target.matches("[data-inbox]")) { await api("inbox", { method: "POST", body: { id: +e.target.dataset.inbox, status: e.target.value } }); const m = state.inbox.find(i => i.id === +e.target.dataset.inbox); if (m) m.status = e.target.value; render(); }
 });
@@ -213,5 +220,6 @@ addEventListener("hashchange", () => { state.tab = location.hash.slice(1) || "ov
 (async () => {
   const me = await fetch("/api/admin/me").then(r => r.json()).catch(() => ({ admin: false, configured: false }));
   state.authed = me.admin; state.configured = me.configured;
+  if (me.admin) try { localStorage.setItem("_bl_ignore", "1"); } catch {}
   render(); if (state.authed) loadAll();
 })();
