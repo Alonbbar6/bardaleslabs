@@ -99,7 +99,44 @@ function initFilters() {
 // ---- contact: preselect interest from ?interest=
 (() => { const i = new URLSearchParams(location.search).get("interest"); const sel = document.querySelector('select[name="interest"]'); if (i && sel) { const o = [...sel.options].find(o => o.text === i); if (o) o.selected = true; } })();
 
+// ---- home: scale-style pinned scenes + DOM motion
+async function initHomeFX() {
+  if (document.body.dataset.page !== "home") return;
+  const { wordReveal, staggerIn, fanCarousel } = await import("./fx/dom.js");
+  const words = document.querySelector("[data-words]"); if (words && !reduceMotion()) wordReveal(words);
+  document.querySelectorAll("[data-stagger]").forEach(el => { if (!reduceMotion()) staggerIn(el); });
+  const fan = document.querySelector("[data-fan]"); if (fan) fanCarousel(fan, { auto: reduceMotion() ? 0 : 4500 });
+
+  const pin = !small && !reduceMotion();
+  const stepper = (sel, dotSel) => (n) => { document.querySelectorAll(sel).forEach((el, i) => el.classList.toggle("is-on", i === n)); if (dotSel) document.querySelectorAll(dotSel).forEach((el, i) => el.classList.toggle("is-on", i === n)); };
+
+  // story: network grows with scroll
+  const story = document.querySelector("[data-story]"), netCanvas = document.querySelector("[data-network]");
+  if (story && netCanvas) {
+    const setStep = stepper("[data-story-step]", "[data-story-dot]");
+    let net = null;
+    if (webgl) { const { createNetwork } = await import("./fx/network.js"); net = createNetwork(netCanvas, { poster: "/office-poster.jpg" }); }
+    const steps = 4;
+    if (pin) {
+      ScrollTrigger.create({ trigger: story, start: "top top", end: "+=320%", pin: "[data-story-pin]", scrub: 0.6, anticipatePin: 1,
+        onUpdate: (s) => { net?.setProgress(0.08 + s.progress * 0.92); setStep(Math.min(steps - 1, Math.floor(s.progress * steps * 0.999))); } });
+    } else { story.classList.add("is-static"); net?.setProgress(1); }
+  }
+
+  // products: layered planes
+  const pl = document.querySelector("[data-planes]"), plCanvas = document.querySelector("[data-planes-canvas]");
+  if (pl && plCanvas) {
+    const setStep = stepper("[data-planes-step]");
+    let planes = null;
+    if (webgl) { const { createPlanes } = await import("./fx/planes.js"); planes = await createPlanes(plCanvas, { steps: [{ draw: "leadgen" }, { draw: "socialsnap" }, { draw: "agents" }], poster: "/office-poster.jpg" }); }
+    if (pin) {
+      ScrollTrigger.create({ trigger: pl, start: "top top", end: "+=220%", pin: "[data-planes-pin]", scrub: 0.6, anticipatePin: 1,
+        onUpdate: (s) => { planes?.setProgress(s.progress); setStep(Math.min(2, Math.floor(s.progress * 3 * 0.999))); } });
+    } else { pl.classList.add("is-static"); planes?.setProgress(0); }
+  }
+}
+
 initFilters();
-Promise.all([initHero(), initMini(), initHow(), initLab()]).then(() => ScrollTrigger.refresh());
+Promise.all([initHero(), initMini(), initHow(), initLab(), initHomeFX()]).then(() => ScrollTrigger.refresh());
 addEventListener("load", () => ScrollTrigger.refresh());
 void pageId;

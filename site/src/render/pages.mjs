@@ -15,7 +15,24 @@ const officeStage = (cls, attr) => html`<div class="${cls}__stage" data-office-s
 
 // ---------------- home
 export function home() {
-  const featured = work.filter(w => w.featured);
+  const featured = work.filter(w => w.featured || ["lead-radar", "miami-market", "ai-assistant"].includes(w.id));
+  const story = [
+    { t: "Take on the project.", d: "Bring the big, messy problem. The system maps what exists, what's missing, and where AI saves the most time.", cta: ["Start a project", "/contact/"] },
+    { t: "Present the solution.", d: "A written plan with options, costs and the first milestone. Clear enough to approve, honest enough to say no to.", cta: ["See how we work", "/about/"] },
+    { t: "Guide it through.", d: "Agents research, draft, test and report. A person approves each step. You watch it happen.", cta: ["Watch the agents", company.agentsUrl] },
+    { t: "Leave it running.", d: "Logged, recoverable, handed to your team or operated by us. Software that keeps working when nobody is watching.", cta: ["See the systems", "/work/"] },
+  ];
+  const planes = [
+    { draw: "leadgen", eyebrow: "Lead generation", t: "Meetings on your calendar, with a brief.", d: "Six agents go from your ideal-customer profile to a booked meeting. Every message says who we are and who we represent.", cta: ["How it works", "/services/#lead-generation"] },
+    { draw: "socialsnap", eyebrow: "SocialSnap", t: "Your accounts, posting on schedule.", d: "A queue, a cadence, and AI reels made from your own calls. Instagram and YouTube, without logging in every other day.", cta: ["Request access", "/store/socialsnap/"] },
+    { draw: "agents", eyebrow: "Agents at Work", t: "Show your users the AI team behind the product.", d: "The live 3D office on this site, as a component for yours. Drive it from your own agent events.", cta: ["Get the embed", "/store/agent-office/"] },
+  ];
+  const results = [
+    { k: "Autonomy", v: "26", d: "tracks written, produced and published with nobody at the keyboard." },
+    { k: "Shipping", v: "5", d: "iOS apps on the App Store in about seven months." },
+    { k: "Pipeline", v: "6", d: "AI agents from customer profile to booked meeting." },
+    { k: "Reliability", v: "0", d: "systems that depend on someone watching them run." },
+  ];
   const body = html`
 <section class="hero" id="top">
   ${officeStage("hero", "data-office")}
@@ -28,19 +45,51 @@ export function home() {
   </div>
 </section>
 
-<section class="proof wrap" aria-label="Numbers">
-  ${company.stats.map(s => html`<div data-reveal><b data-count="${s.value}">${s.value}</b><span>${esc(s.label)}</span><small class="muted">${esc(s.note)}</small></div>`)}
+<section class="marquee" aria-label="Worked with">
+  <div class="marquee__track">${[0, 1].map(() => company.partners.concat(["Azure AI Foundry", "Anthropic", "OpenAI", "Cloudflare", "Stripe"]).map(p => html`<span>${esc(p)}</span>`))}</div>
+</section>
+
+<section class="mission wrap">
+  <p class="eyebrow" data-reveal>Mission</p>
+  <h2 class="mission__text" data-words>Build innovative tech solutions and help your business run smoother with AI. Take on the big project. Present the solution. Guide it through.</h2>
+</section>
+
+<section class="story" id="story" data-story>
+  <div class="story__pin" data-story-pin>
+    <canvas class="story__canvas" data-network aria-hidden="true"></canvas>
+    <div class="story__shade"></div>
+    <div class="wrap story__steps">
+      ${story.map((s, i) => html`<div class="story__step${i === 0 ? " is-on" : ""}" data-story-step="${i}">
+        <p class="eyebrow">0${i + 1} · ${i === 0 ? "The system" : i === 3 ? "After launch" : "How it works"}</p>
+        <h2>${esc(s.t)}</h2><p class="lede">${esc(s.d)}</p>${cta(s.cta[0], s.cta[1])}
+      </div>`)}
+    </div>
+    <ol class="story__dots" aria-hidden="true">${story.map((_, i) => html`<li data-story-dot="${i}"${i === 0 ? ' class="is-on"' : ""}></li>`)}</ol>
+  </div>
 </section>
 
 <section class="block wrap" id="what">
   ${sectionHead("What we do", "Six ways to work with BardalesLabs.", "Hire us to build, buy what we've built, or partner on something funded. Every engagement ends with software that runs.")}
-  <div class="tiles">${services.map(serviceTile)}</div>
+  <div class="tiles" data-stagger>${services.map(serviceTile)}</div>
 </section>
 
-<section class="block wrap" id="work">
-  ${sectionHead("Selected work", "Systems we built and run.")}
-  <div class="cards cards--2">${featured.map(workCard)}</div>
-  <p class="more" data-reveal><a href="/work/">All ${work.length} case studies →</a></p>
+<section class="planes" id="products" data-planes>
+  <div class="planes__pin" data-planes-pin>
+    <div class="wrap planes__grid">
+      <div class="planes__copy">
+        <p class="eyebrow">Products</p>
+        ${planes.map((p, i) => html`<div class="planes__step${i === 0 ? " is-on" : ""}" data-planes-step="${i}">
+          <p class="planes__k">${esc(p.eyebrow)}</p><h2>${esc(p.t)}</h2><p class="lede">${esc(p.d)}</p>${cta(p.cta[0], p.cta[1])}
+        </div>`)}
+      </div>
+      <canvas class="planes__canvas" data-planes-canvas aria-hidden="true"></canvas>
+    </div>
+  </div>
+</section>
+
+<section class="block wrap results" id="results">
+  ${sectionHead("Real systems, real numbers", "What the work has done.")}
+  <div class="results__grid" data-stagger>${results.map(r => html`<div class="result"><p class="result__k mono">${esc(r.k)}</p><b>${esc(r.v)}</b><p>${esc(r.d)}</p></div>`)}</div>
 </section>
 
 <section class="block wrap" id="agents">
@@ -56,9 +105,14 @@ export function home() {
   </div>
 </section>
 
-<section class="block wrap" id="store">
-  ${sectionHead("Store", "Products you can buy today.")}
-  <div class="cards cards--3">${products.map(productCard)}</div>
+<section class="block fan" id="work" data-fan>
+  <div class="wrap">${sectionHead("Selected work", "Systems we built and run.")}</div>
+  <div class="fan__stage">
+    <button class="fan__btn fan__btn--prev" data-fan-prev aria-label="Previous">‹</button>
+    <div class="fan__track" data-fan-track>${featured.map(w => html`<a class="fan__card" href="/work/${w.id}/"><p class="eyebrow">${esc(w.kind)}</p><h3>${esc(w.title)}</h3><p>${esc(w.tag)}</p><span class="fan__metric"><b>${esc(w.metric.value)}</b> ${esc(w.metric.label)}</span></a>`)}</div>
+    <button class="fan__btn fan__btn--next" data-fan-next aria-label="Next">›</button>
+  </div>
+  <p class="more wrap" data-reveal><a href="/work/">All ${work.length} case studies →</a></p>
 </section>
 
 <section class="block wrap" id="founder">
@@ -72,11 +126,6 @@ export function home() {
       <div class="actions">${cta("About BardalesLabs", "/about/", "btn btn--ghost")}${cta("Work with Alonso")}</div>
     </div>
   </div>
-</section>
-
-<section class="block wrap" id="partners">
-  <p class="eyebrow" data-reveal>Worked with</p>
-  <ul class="logos" data-reveal>${company.partners.map(p => html`<li>${esc(p)}</li>`)}</ul>
 </section>
 
 ${contactBand()}`;
