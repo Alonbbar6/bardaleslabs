@@ -18,6 +18,7 @@ export default defineConfig({
   publicDir: resolve(__dirname, "public"),
   envDir: __dirname,
   resolve: { alias: { "@office": resolve(__dirname, "../pixel-web/src/office/index.js") }, dedupe: ["three"] },
-  server: { fs: { allow: [resolve(__dirname, "..")] } },
+  // local dev: `npx wrangler dev --port 8788` serves the Worker (API, D1, tracker); Vite proxies to it
+  server: { fs: { allow: [resolve(__dirname, "..")] }, proxy: { "/api": "http://localhost:8788", "/t.js": "http://localhost:8788" } },
   build: { outDir: resolve(__dirname, "dist"), emptyOutDir: true, rollupOptions: { input: htmlInputs(PAGES) } },
 });

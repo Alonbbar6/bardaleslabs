@@ -56,6 +56,7 @@ ${body}
 </main>
 ${footer()}
 <script type="module" src="/src/main.js"></script>
+<script defer src="/t.js" data-property="bardaleslabs"></script>
 </body>
 </html>`;
 }

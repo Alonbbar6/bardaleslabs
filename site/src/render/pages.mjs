@@ -356,8 +356,17 @@ export function contactPage() {
   return page({ title: "Contact — BardalesLabs", description: "Book a call with BardalesLabs.", body, active: "/contact/", pageId: "contact", depth: 1 });
 }
 
+// ---------------- admin (standalone SPA; no public chrome, no indexing)
+export function adminPage() {
+  return html`<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BardalesLabs admin</title><meta name="robots" content="noindex, nofollow" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141821'/%3E%3Cpath d='M9 23V9h7a4 4 0 0 1 2.2 7.3A4 4 0 0 1 17 23z' fill='%236ea0ff'/%3E%3C/svg%3E" />
+</head><body><div id="app"></div><script type="module" src="/src/admin/admin.js"></script></body></html>`;
+}
+
 export function allPages() {
-  const out = { "index.html": home(), "services/index.html": servicesPage(), "work/index.html": workIndex(), "apps/index.html": appsPage(), "store/index.html": storeIndex(), "lab/index.html": labPage(), "about/index.html": aboutPage(), "contact/index.html": contactPage() };
+  const out = { "admin/index.html": adminPage(), "index.html": home(), "services/index.html": servicesPage(), "work/index.html": workIndex(), "apps/index.html": appsPage(), "store/index.html": storeIndex(), "lab/index.html": labPage(), "about/index.html": aboutPage(), "contact/index.html": contactPage() };
   for (const w of work) out[`work/${w.id}/index.html`] = workPage(w);
   for (const p of products) out[`store/${p.id}/index.html`] = productPage(p);
   return out;

@@ -8,3 +8,4 @@ pages/
 .dev.vars
 .wrangler/
 .DS_Store
+.admin-password.local

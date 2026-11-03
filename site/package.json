@@ -8,7 +8,10 @@
     "dev": "npm run gen && vite",
     "build": "npm run gen && vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && npx wrangler deploy"
+    "deploy": "npm run build && npx wrangler deploy",
+    "dev:api": "npx wrangler dev --port 8788 --local",
+    "db:migrate": "npx wrangler d1 execute bardaleslabs --remote --file schema.sql -y",
+    "db:local": "npx wrangler d1 execute bardaleslabs --local --file schema.sql -y"
   },
   "dependencies": {
     "gsap": "^3.13.0",
