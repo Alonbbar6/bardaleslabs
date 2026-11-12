@@ -29,3 +29,12 @@ export function browser(ua = "") {
   if (/Safari\//.test(ua) && /Version\//.test(ua)) return "Safari"; if (/Firefox\//.test(ua)) return "Firefox"; return "Other";
 }
 export const host = (url) => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; } };
+
+// ids, tokens and slugs
+const ALPHA = "abcdefghijklmnopqrstuvwxyz0123456789";
+export const rid = (n = 12) => [...crypto.getRandomValues(new Uint8Array(n))].map(b => ALPHA[b % 36]).join("");
+export const token = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(24)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+export const slugify = (s, max = 48) => String(s || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, max).replace(/-+$/, "");
+/** D1 error for a table that hasn't been created yet (schema.sql not applied). */
+export const noTable = (e) => /no such table/i.test(String(e?.message || e));
+export const MIGRATE = "Database tables are missing. Run `npm run db:migrate` in site/ (safe to re-run).";

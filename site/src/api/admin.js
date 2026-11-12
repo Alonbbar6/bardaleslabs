@@ -57,7 +57,7 @@ export async function inbox(request, env) {
 
 export async function settings(request, env) {
   const ip = request.headers.get("cf-connecting-ip") || "";
-  if (request.method === "GET") return json({ ...Object.fromEntries((await q(env, "SELECT key, value FROM settings")).map(r => [r.key, r.value])), __ip: ip, __resend: !!env.RESEND_API_KEY });
+  if (request.method === "GET") return json({ ...Object.fromEntries((await q(env, "SELECT key, value FROM settings")).map(r => [r.key, r.value])), __ip: ip, __resend: !!env.RESEND_API_KEY, __stripe: !!env.STRIPE_SECRET_KEY, __stripe_webhook: !!env.STRIPE_WEBHOOK_SECRET, __media: !!env.MEDIA });
   const b = await readJson(request); if (!b || typeof b !== "object") return text("bad", 400);
   for (const [k, v] of Object.entries(b)) await env.DB.prepare("INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(k, String(v)).run();
   return json({ ok: true });

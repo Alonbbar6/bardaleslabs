@@ -96,6 +96,43 @@ function initFilters() {
   }));
 }
 
+// ---- cars: photo gallery (scroll-snap does the swiping; this adds arrows, thumbnails, counter, keys)
+function initGallery() {
+  const g = document.querySelector("[data-gallery]"); if (!g) return;
+  const track = g.querySelector("[data-gallery-track]"), n = track.children.length, count = g.querySelector("[data-gallery-count]");
+  const thumbs = [...document.querySelectorAll("[data-gallery-go]")];
+  let cur = 0, raf = 0;
+  const go = (i) => track.scrollTo({ left: ((i + n) % n) * track.clientWidth, behavior: reduceMotion() ? "auto" : "smooth" });
+  const sync = () => {
+    raf = 0; const i = Math.min(n - 1, Math.round(track.scrollLeft / Math.max(1, track.clientWidth)));
+    if (i === cur) return; cur = i;
+    if (count) count.textContent = `${i + 1} / ${n}`;
+    thumbs.forEach((t, k) => t.classList.toggle("is-on", k === i));
+    const t = thumbs[i], strip = t?.parentElement; // keep the active thumbnail in view without scrolling the page
+    if (strip) strip.scrollTo({ left: t.offsetLeft - strip.offsetLeft - (strip.clientWidth - t.clientWidth) / 2, behavior: "smooth" });
+  };
+  track.addEventListener("scroll", () => { raf ||= requestAnimationFrame(sync); }, { passive: true });
+  g.querySelector("[data-gallery-prev]")?.addEventListener("click", () => go(cur - 1));
+  g.querySelector("[data-gallery-next]")?.addEventListener("click", () => go(cur + 1));
+  thumbs.forEach((t, k) => t.addEventListener("click", () => go(k)));
+  track.addEventListener("keydown", (e) => { if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); go(cur + (e.key === "ArrowRight" ? 1 : -1)); } });
+}
+
+// ---- cars: filters apply on change; empty fields are left out of the URL
+function initCarFilter() {
+  const f = document.querySelector("[data-carfilter]"); if (!f) return;
+  f.querySelectorAll("select").forEach(s => s.addEventListener("change", () => f.requestSubmit()));
+  f.addEventListener("submit", () => f.querySelectorAll("input, select").forEach(el => { if (!el.value || (el.name === "sort" && el.value === "new")) el.disabled = true; }));
+  addEventListener("pageshow", () => f.querySelectorAll("[disabled]").forEach(el => { el.disabled = false; })); // back/forward cache
+}
+
+// ---- store: one click per checkout
+document.querySelectorAll("[data-buy]").forEach(form => {
+  const b = form.querySelector("button"), label = b.textContent;
+  form.addEventListener("submit", () => setTimeout(() => { b.disabled = true; b.textContent = form.email ? "Sending…" : "Opening checkout…"; }, 0));
+  addEventListener("pageshow", () => { b.disabled = false; b.textContent = label; }); // back from Stripe
+});
+
 // ---- contact: preselect interest from ?interest=
 (() => { const i = new URLSearchParams(location.search).get("interest"); const sel = document.querySelector('select[name="interest"]'); if (i && sel) { const o = [...sel.options].find(o => o.text === i); if (o) o.selected = true; } })();
 
@@ -137,6 +174,8 @@ async function initHomeFX() {
 }
 
 initFilters();
+initGallery();
+initCarFilter();
 Promise.all([initHero(), initMini(), initHow(), initLab(), initHomeFX()]).then(() => ScrollTrigger.refresh());
 addEventListener("load", () => ScrollTrigger.refresh());
 void pageId;

@@ -39,13 +39,14 @@ export const productCard = (p) => html`<article class="card product" data-reveal
   <a class="btn" href="/store/${p.id}/">Details</a>
 </article>`;
 
-export const contactForm = ({ interest = "", prompt = "What do you need built, sold or automated?", options = true } = {}) => html`<form class="form" data-form novalidate>
+// simple: shoppers rather than businesses (no company field, plain "Email")
+export const contactForm = ({ interest = "", prompt = "What do you need built, sold or automated?", options = true, simple = false } = {}) => html`<form class="form" data-form novalidate>
   <label>Name<input name="name" required autocomplete="name" /></label>
-  <label>Work email<input name="email" type="email" required autocomplete="email" /></label>
-  <label>Company<input name="company" autocomplete="organization" /></label>
+  <label>${simple ? "Email" : "Work email"}<input name="email" type="email" required autocomplete="email" /></label>
+  ${simple ? "" : html`<label>Company<input name="company" autocomplete="organization" /></label>`}
   <label>${esc(prompt)}<textarea name="message" rows="4" required></textarea></label>
   ${options ? html`<label class="form__select">I'm interested in
-    <select name="interest">${["Lead generation", "AI solutions and agents", "Software and web platforms", "iOS app", "AI advisory and contract work", "Grant or innovation partnership", "Hiring Alonso (contract or remote)", "SocialSnap", "Agents at Work embed", "Something else"].map(o => html`<option${o === interest ? " selected" : ""}>${esc(o)}</option>`)}</select>
+    <select name="interest">${["Lead generation", "AI solutions and agents", "Software and web platforms", "iOS app", "AI advisory and contract work", "Grant or innovation partnership", "Hiring Alonso (contract or remote)", "SocialSnap", "Agents at Work embed", "Digital products", "Car directory", "Something else"].map(o => html`<option${o === interest ? " selected" : ""}>${esc(o)}</option>`)}</select>
   </label>` : html`<input type="hidden" name="interest" value="${esc(interest)}" />`}
   <input type="text" name="website" class="hp" tabindex="-1" autocomplete="off" />
   <button class="btn" type="submit">Send</button>

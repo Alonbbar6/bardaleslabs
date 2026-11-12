@@ -6,12 +6,19 @@ compatibility_date = "2026-10-01"
 directory = "./dist"
 binding = "ASSETS"
 not_found_handling = "404-page"
-run_worker_first = ["/api/*", "/t.js"]
+# the Worker renders cars and the store from D1 and serves R2 media; everything else is a static file
+run_worker_first = ["/api/*", "/t.js", "/media/*", "/cars", "/cars/*", "/store", "/store/*", "/sitemap.xml"]
 
 [[d1_databases]]
 binding = "DB"
 database_name = "bardaleslabs"
 database_id = "06d8ab99-607d-4802-b591-317875725d82"
+
+# car photos, product covers (public under /media/) and paid product files (private, token downloads)
+# create once: npx wrangler r2 bucket create bardaleslabs-media
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "bardaleslabs-media"
 
 # daily: pull App Store Connect downloads (when ASC_* secrets are set) and prune old raw events
 [triggers]
@@ -21,6 +28,8 @@ crons = ["30 6 * * *"]
 #   ADMIN_PASSWORD        admin login
 #   RESEND_API_KEY        contact form email
 #   ASC_ISSUER_ID, ASC_KEY_ID, ASC_PRIVATE_KEY, ASC_VENDOR_NUMBER   App Store Connect sales reports
+#   STRIPE_SECRET_KEY     store checkout (sk_live_... or sk_test_...)
+#   STRIPE_WEBHOOK_SECRET signing secret of the /api/store/webhook endpoint (whsec_...)
 [vars]
 CONTACT_TO = "alonso@bardaleslabs.com"
 CONTACT_FROM = "BardalesLabs <site@bardaleslabs.com>"

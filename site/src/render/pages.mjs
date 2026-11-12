@@ -1,11 +1,12 @@
 import { html, esc, page } from "./layout.mjs";
-import { cta, sectionHead, workCard, serviceTile, appCard, productCard, contactForm, contactBand, ctaBand } from "./components.mjs";
+import { cta, sectionHead, workCard, serviceTile, appCard, contactForm, contactBand, ctaBand } from "./components.mjs";
 import { company } from "../data/company.js";
 import { services, serviceById } from "../data/services.js";
 import { work, workById, KINDS } from "../data/work.js";
 import { apps, appsNote } from "../data/apps.js";
 import { products, productById } from "../data/products.js";
 import { bio, pillars, principles, timeline, capabilities } from "../data/about.js";
+import { storeIndexBody, STORE_DESCRIPTION } from "./store.mjs";
 
 const officeStage = (cls, attr) => html`<div class="${cls}__stage" data-office-stage>
   <div class="${cls}__office" ${attr} aria-hidden="true"></div>
@@ -226,14 +227,23 @@ export function appsPage() {
 }
 
 // ---------------- store
+// Static fallback; in production the Worker renders /store/ with the digital products from D1 (src/api/ssr.js).
 export function storeIndex() {
-  const body = html`
-<section class="wrap page__hero">
-  ${sectionHead("Store", "Products you can buy today.", "Software we built for ourselves and now sell: a social media scheduler, the live agent office, and the characters inside it.")}
-</section>
-<section class="wrap"><div class="cards cards--3">${products.map(productCard)}</div></section>
-${ctaBand("Want a custom version of any of these?", "Talk to us")}`;
-  return page({ title: "Store — BardalesLabs", description: "SocialSnap, the Agents at Work embed and the office worker character pack.", body, active: "/store/", pageId: "store", depth: 1 });
+  return page({ title: "Store — BardalesLabs", description: STORE_DESCRIPTION, body: storeIndexBody([]), active: "/store/", pageId: "store", depth: 1 });
+}
+
+// ---------------- server-rendered sections (cars, digital products)
+// Vite builds these like any page (hashed CSS/JS, nav, footer); the Worker fills the two markers per request.
+export const shellPage = (active, pageId) => page({ head: "<!--ssr:head-->", body: "<!--ssr:body-->", active, pageId });
+
+export function notFoundPage() {
+  const body = html`<section class="wrap page__hero">
+  <p class="eyebrow">404</p>
+  <h1>That page isn't here.</h1>
+  <p class="lede">It may have moved, or the link has a typo.</p>
+  <div class="actions">${cta("Go to the home page", "/", "btn")}${cta("Cars for sale", "/cars/", "btn btn--ghost")}${cta("Store", "/store/", "btn btn--ghost")}</div>
+</section>`;
+  return page({ title: "Page not found — BardalesLabs", description: "Page not found.", body, pageId: "404" });
 }
 
 export function productPage(p) {
@@ -366,7 +376,9 @@ export function adminPage() {
 }
 
 export function allPages() {
-  const out = { "admin/index.html": adminPage(), "index.html": home(), "services/index.html": servicesPage(), "work/index.html": workIndex(), "apps/index.html": appsPage(), "store/index.html": storeIndex(), "lab/index.html": labPage(), "about/index.html": aboutPage(), "contact/index.html": contactPage() };
+  const out = { "admin/index.html": adminPage(), "index.html": home(), "services/index.html": servicesPage(), "work/index.html": workIndex(), "apps/index.html": appsPage(), "store/index.html": storeIndex(), "lab/index.html": labPage(), "about/index.html": aboutPage(), "contact/index.html": contactPage(), "404.html": notFoundPage() };
+  out["cars/_shell/index.html"] = shellPage("/cars/", "cars");
+  out["store/_shell/index.html"] = shellPage("/store/", "store");
   for (const w of work) out[`work/${w.id}/index.html`] = workPage(w);
   for (const p of products) out[`store/${p.id}/index.html`] = productPage(p);
   return out;

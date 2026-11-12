@@ -10,6 +10,7 @@ export const company = {
     { href: "/work/", label: "Work" },
     { href: "/apps/", label: "Apps" },
     { href: "/store/", label: "Store" },
+    { href: "/cars/", label: "Cars" },
     { href: "/lab/", label: "Lab" },
     { href: "/about/", label: "About" },
   ],

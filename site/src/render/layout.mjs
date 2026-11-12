@@ -33,19 +33,29 @@ export function footer() {
 </footer>`;
 }
 
-/** Full document. */
-export function page({ title, description, body, active = "", pageId, image = "/office-poster.jpg" }) {
+/** Title, description, social preview and structured data. Also used by the Worker for server-rendered pages. */
+export function headMeta({ title, description, image = "/office-poster.jpg", url = "", jsonld = null, noindex = false }) {
+  const img = /^https?:/.test(image) ? image : company.domain + image;
+  return html`<title>${esc(title)}</title>
+<meta name="description" content="${esc(description)}" />
+<meta property="og:title" content="${esc(title)}" />
+<meta property="og:description" content="${esc(description)}" />
+<meta property="og:image" content="${esc(img)}" />
+<meta name="twitter:card" content="summary_large_image" />${url ? html`
+<link rel="canonical" href="${esc(url)}" />
+<meta property="og:url" content="${esc(url)}" />` : ""}${noindex ? html`
+<meta name="robots" content="noindex" />` : ""}${jsonld ? html`
+<script type="application/ld+json">${JSON.stringify(jsonld).replace(/</g, "\\u003c")}</script>` : ""}`;
+}
+
+/** Full document. `head` replaces the generated meta (server-rendered shells pass a marker). */
+export function page({ title, description, body, active = "", pageId, image, head }) {
   return html`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${esc(title)}</title>
-<meta name="description" content="${esc(description)}" />
-<meta property="og:title" content="${esc(title)}" />
-<meta property="og:description" content="${esc(description)}" />
-<meta property="og:image" content="${company.domain}${image}" />
-<meta name="twitter:card" content="summary_large_image" />
+${head ?? headMeta({ title, description, image })}
 <link rel="icon" href="${ICON}" />
 </head>
 <body data-page="${pageId}">
