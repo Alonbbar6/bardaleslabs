@@ -5,7 +5,7 @@ import { storeIndexBody, digitalBody, digitalHead, thanksBody, STORE_DESCRIPTION
 import { listCars, carFacets, carFilters, getCar, moreCars, listedCarIds, CAR_ID, PAGE_SIZE } from "./cars.js";
 import { listProducts, getProduct, thanksData, stripeReady, PRODUCT_ID } from "./store.js";
 import { isAdmin } from "./auth.js";
-import { noTable, MIGRATE } from "./util.js";
+import { noTable, MIGRATE, see } from "./util.js";
 import { company } from "../data/company.js";
 import { work } from "../data/work.js";
 import { products } from "../data/products.js";
@@ -17,7 +17,7 @@ async function render(env, request, section, { head, body, status = 200 }) {
   const out = (await shell.text()).replace("<!--ssr:head-->", () => headMeta(head)).replace("<!--ssr:body-->", () => body);
   return new Response(out, { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
 }
-const slashed = (url) => url.pathname.endsWith("/") ? null : Response.redirect(`${url.origin}${url.pathname}/${url.search}`, 301);
+const slashed = (url) => url.pathname.endsWith("/") ? null : see(`${url.pathname}/${url.search}`, 301);
 const banner = (msg, href) => html`<div class="wrap"><p class="notice notice--admin">${esc(msg)} <a href="${href}">Edit in admin →</a></p></div>`;
 const adminNotice = (e) => html`<p class="notice notice--admin">${esc(noTable(e) ? MIGRATE : `Database error: ${e.message}`)} (Only you see this.)</p>`;
 

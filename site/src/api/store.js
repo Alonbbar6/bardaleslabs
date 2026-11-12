@@ -1,6 +1,6 @@
 // Digital store: products in D1, files in R2, payments through Stripe Checkout.
 // Secrets: STRIPE_SECRET_KEY (checkout), STRIPE_WEBHOOK_SECRET (signed webhook). RESEND_API_KEY emails receipts.
-import { json, text, readJson, rid, token, safeEqual, noTable, MIGRATE } from "./util.js";
+import { json, text, see, readJson, rid, token, safeEqual, noTable, MIGRATE } from "./util.js";
 import { sendEmail } from "./email.js";
 import { deleteImages, PHOTO_ID, FILE_KEY } from "./media.js";
 import { DOWNLOAD_LIMIT, priceLabel } from "../render/store.mjs";
@@ -34,10 +34,10 @@ export async function checkout(request, env) {
   const origin = new URL(request.url).origin;
   const form = await request.formData().catch(() => null);
   const id = String(form?.get("product") || "");
-  if (!form || form.get("website")) return Response.redirect(`${origin}/store/`, 303); // honeypot
+  if (!form || form.get("website")) return see("/store/"); // honeypot
   const p = PRODUCT_ID.test(id) ? await getProduct(env, id).catch(() => null) : null;
-  if (!p || p.status !== "live") return Response.redirect(`${origin}/store/`, 303);
-  const back = (why) => Response.redirect(`${origin}/store/${p.id}/?checkout=${why}#buy`, 303);
+  if (!p || p.status !== "live") return see("/store/");
+  const back = (why) => see(`/store/${p.id}/?checkout=${why}#buy`);
   if (!p.file_key) return back("error");
 
   if (!p.price) { // free: trade the download for an email address
@@ -46,7 +46,7 @@ export async function checkout(request, env) {
     const o = { id: `free_${rid(16)}`, product_id: p.id, email, amount: 0, currency: "usd", token: token(), payment_intent: "" };
     await insertOrder(env, o);
     await deliver(env, o.id, origin);
-    return Response.redirect(`${origin}/store/thanks/?order=${o.token}`, 303);
+    return see(`/store/thanks/?order=${o.token}`);
   }
   if (!stripeReady(env)) return back("unavailable");
   try {
